@@ -1,0 +1,3 @@
+N_THREAD 10 # Number of thread in server
+N_FILE 100 # Number max of possible file in storage
+MEM_SIZE 512 # Dimension of file storage server in Mbytes
