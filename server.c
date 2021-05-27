@@ -1,87 +1,157 @@
 /*-------------------FILE STORAGE SERVER-------------------*/
 
+#define _POSIX_C_SOURCE  200112L
+//#include <unistd.h>
+#include <sys/select.h>
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <getopt.h>
+#include <pthread.h>
+#include <ctype.h>
+#include <sys/uio.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include "configuration.h"
+#include <unistd.h>
 
 
-#define BUF_SIZE 256
+#include <assert.h>
+//#include "util.h"
+
+
+#define SOCKNAME "./cs_sock"
+#define BUFSIZE 256
+
+typedef struct message {
+    int len;
+    char *str;
+} msg_t;
 
 typedef struct {
-    int N_THREAD; // number of threads in server
-    int N_FILE; // max number of possible file in storage
-    int MEM_SIZE; //max size of memory storage in Mbytes
-} config_t;
+    pthread_t thid;
+    int var_libero; // 1 -> true; 0 -> false;
+} thread_t;
+
+int updatemax(fd_set set, int fdmax) {
+    for (int i = (fdmax - 1); i >= 0; --i)
+        if (FD_ISSET(i, &set)) return i;
+    assert(1 == 0);
+    //return -1;
+}
+
+void *threadW() {
+    printf("collegato\n");
+    return (void *) 0;
+}
+
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {// ~$ ./server -F config.txt (null)
-        printf("Use: ./server -F <fileConfig.txt>\n");
-        return -1;
-    }
-    FILE *config = NULL;
-    int opt;
-    opterr = 0; // disattivo l'output della riga './out: invalid option -- 'g''
-    // cosi il file scritto di seguito a '-F' so che sara' un file config
-    if ((opt = getopt(argc, argv, "F:")) != -1) {
-        if (opt == 'F') {
-            if ((config = fopen(optarg, "r")) == NULL) {
-                perror("config fopen");
-                exit(errno);
-            }
-        } else {
-            printf("Invalid option\n");
-            printf("Use: ./server -F <fileConfig.txt>\n");
-            exit(EXIT_FAILURE);
+    config_t *cfg = malloc(sizeof(config_t));
+    configuration(argc, argv, cfg);
+
+
+    /*------ THREAD WORKER INITIALIZER ------*/
+    // (_______fare in seguito un controllo di thread W se occupato o no______)
+
+    thread_t *lst_thread[cfg->N_THREAD]; // lista di thread worker
+    for (int i = 0; i < cfg->N_THREAD; ++i) {
+        thread_t *th = malloc(sizeof(thread_t));
+        if (pthread_create(&th->thid, NULL, threadW, NULL) != 0) {
+            fprintf(stderr, "pthread_create FALLITA\n");
+            exit(errno);
         }
+        th->var_libero = 1; // thread libero
+        lst_thread[i] = th;
+
     }
-    // qui ricopio il contenuto di config file nelle varie variabili della struct config_t
-    char buffer[BUF_SIZE]; // qui e' dove mettero' le righe del file config.txt
-    config_t cfg;
-    char *tmp;// mi serve per far strtok_r rientrante
-    char *token;
-    // per leggere riga per riga quello che sta dentro al file
-    //           line_out   size    file
-    while (fgets(buffer, BUF_SIZE, config) != NULL) {
-        char *correct = NULL;
-        token = strtok_r(buffer, " ", &tmp);
-        if (strncmp(token, "N_THREAD", strlen("N_THREAD")) ==
-            0) {// i due casi di seguito sono una ripetizione di questo, vedi di fare una funzione in futuro
-            token = strtok_r(NULL, " ", &tmp);
-            long number = strtol(token, &correct, 10);// trasformo il num stringa in int.
-            if (correct != NULL && *correct == (char) 0) {// controllo che non ci siano errori
-                cfg.N_THREAD = (int) number;
-                printf("N_THREAD cfg %d\n", cfg.N_THREAD);
-            } else {
-                printf("N_THREAD convertion error");
-                exit(EXIT_FAILURE);
-            }
-        } else if (strncmp(token, "N_FILE", strlen("N_FILE")) == 0) {
-            token = strtok_r(NULL, " ", &tmp);
-            long number = strtol(token, &correct, 10);// trasformo il num sringa in int.
-            if (correct != NULL && *correct == (char) 0) {
-                cfg.N_FILE = (int) number;
-                printf("N_FILE cfg %d\n", cfg.N_FILE);
-            } else {
-                perror("N_FILE convertion error");
-                exit(EXIT_FAILURE);
-            }
-        } else if (strncmp(token, "MEM_SIZE", strlen("MEM_SIZE")) == 0) {
-            token = strtok_r(NULL, " ", &tmp);
-            long number = strtol(token, &correct, 10);// trasformo il num sringa in int.
-            if (correct != NULL && *correct == (char) 0) {
-                cfg.MEM_SIZE = (int) number;
-                printf("MEM_SIZE cfg %d\n", cfg.MEM_SIZE);
-            } else {
-                perror("MEM_SIZE convertion error");
-                exit(EXIT_FAILURE);
-            }
-        } else {// se per caso il formato del file config non e' corretto allora errore
-            printf("format config file error\n");
-            fprintf(stderr, "Value of errno: %d\n", errno);
+    printf("creato i thread\n");
+
+
+    int fd_server;
+    if ((fd_server = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {  // creo il socket
+        perror("socket");
+        exit(errno);
+    }
+    struct sockaddr_un server_address;    // setto l'indirizzo
+    //memset(&server_address, '0', sizeof(server_address));
+    server_address.sun_family = AF_UNIX;
+    strncpy(server_address.sun_path, SOCKNAME, strlen(SOCKNAME) + 1);
+    if ((bind(fd_server, (struct sockaddr *) &server_address, sizeof(server_address))) !=
+        0) {//assegno l'indirizzo al socket
+        perror("bind");
+        exit(errno);
+    }
+    if ((listen(fd_server, SOMAXCONN)) != 0) {//metto il socket in ascolto
+        perror("listen");
+        exit(errno);
+    }
+
+    int fd_max = 0;
+    fd_set set, tmpset;
+    if (fd_server > fd_max) fd_max = fd_server;
+    // azzero sia il master set che il set temporaneo usato per la select
+    FD_ZERO(&set);
+    FD_ZERO(&tmpset);
+    FD_SET(fd_server, &set);// sara' il descr. su cui faro' nuove connessioni, quindi accept()
+    printf("Waiting for connetions...\n");
+    while (1) {
+        tmpset = set;// necessario perche' select modifica il master set
+        if (select(fd_max + 1, &tmpset, NULL, NULL, NULL) == -1) {
+            perror("select");
+            exit(errno);
         }
+        for (int fd = 0; fd <= fd_max; ++fd) {
+            if (FD_ISSET(fd, &tmpset)) {
+                int fd_client;
+                if (fd == fd_server) {
+                    fd_client = accept(fd_server, NULL, 0);
+                    printf("Connected !\n");
+                    FD_SET(fd_client, &set);// aggiunggo connection a master set
+                    if (fd_client > fd_max) fd_max = fd_client;
+                }// else if (pipe) continue; MANCA controllo pipe
+                else { // se richiesta disponibile
+                    printf("else\n");
+                    FD_CLR(fd, &set);// lo tolgo dall'insieme dei descrittori
+                    if (fd == fd_max) fd_max = updatemax(set, fd_max); // aggiorno il max
+
+                    /*------------SIMPLE CONNECTION with client INIT TEST-----------*/
+
+                    msg_t messaggio;
+                    messaggio.str = malloc(sizeof(char *)*BUFSIZE);
+                    int sz;
+                    char buffer[BUFSIZE];
+
+                    printf("from Server\n");
+
+                    read(fd, &sz, sizeof(int));
+                    read(fd, buffer, sz);
+                    printf("message ricieve : %s\n", buffer);
+
+                    messaggio.str = "collegamento okay \n";
+                    messaggio.len = (int) strlen(messaggio.str);
+                    write(fd, &messaggio.len, sizeof(int));
+                    write(fd, messaggio.str, messaggio.len);
+                    printf("message wirtten to client\n");
+                    // Manca la parte della coda e dei thread worker
+
+                    // devo rimettere il client a disposizione nel manager
+
+
+                    /*------------SIMPLE CONNECTION with client FINE-----------*/
+
+                }
+            }
+        }
+
     }
-    fclose(config);
+    for (int i = 0; i < cfg->N_THREAD; ++i) {
+        pthread_join(lst_thread[i]->thid, NULL);
+    }
+
+    free(cfg);
     return 0;
 }
