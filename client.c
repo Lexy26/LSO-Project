@@ -3,113 +3,123 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
+//#include <sys/socket.h>
+#include <getopt.h>
+//#include <sys/types.h>
+//#include <sys/un.h>
 #include <errno.h>
 #include <string.h>
 
-#define SOCKNAME "./cs_sock"
-#define BUFSIZE 256
+#include "util.h"
+#include "API.h"
 
-typedef struct message {
-    int len;
-    char *str;
-} msg_t;
+//#define BUFSIZE 256
+#define LST_SZ 15
 
 typedef struct {
-    int command;
-    char which[2];
-    char * contenuto;
-}instr_t;
+    int option; // 1 se comando c'e' || 0 se comqndo non richiesto
+    char *param; // optarg, cio' ch sta dopo il comando
+} command_t;
+
+void initCommand(command_t **char_abc) {
+    CHECK_EXIT("calloc", *char_abc, calloc(1, sizeof(command_t)), NULL)
+    //CHECK_EXIT("calloc", (*char_abc)->param, calloc(BUFSIZE, sizeof(char)), NULL)
+    (*char_abc)->option = 0;
+    (*char_abc)->param = NULL;
+}
+
+void upgradeCommand(command_t **char_abc, command_t **lst, int index, char *ptarg) {
+    (*char_abc)->option = 1;
+    (*char_abc)->param = ptarg;
+    lst[index] = *char_abc;
+}
+
+void freer(command_t **lst, size_t sz) {
+    for (int i = 0; i < sz; ++i) {
+        //free(lst[i]->param);
+        free(lst[i]);
+    }
+    free(lst);
+}
 
 int main(int argc, char *argv[]) {
-    // fare un warning sul controllo del PATH ASSOLUTO, il quale non viene dato da riga
-    // di comando, lo devo controllare io nel server
-    // analizzare con getopt il numero di richieste fatte dal client in linea di comando
-    // faccio un 'for' da protocollo richiesta risdposta
     if (argc < 2) {
-        printf("usage: ./client <comand1> <comand2>\n");
+        printf("usage: ./client option [parameters]\n"
+               "   or: ./client -h (help)\n");
         exit(EXIT_FAILURE);
     }
-    int fd_c; // crea client socket + error control
 
-    if ((fd_c = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {  // creo il socket
-        perror("socket");
-        exit(errno);
-    }
+    // connection with server
+    simple_opneConnection(SOCKNAME, 1, 10);
 
-    struct sockaddr_un serv_addr; // setto l'indirizzo
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sun_family = AF_UNIX;
-    strncpy(serv_addr.sun_path, SOCKNAME,
-            strlen(SOCKNAME) + 1);// do' il nome al file descr del socket per la connection
-
-    // creo connessione col server
-    if (connect(fd_c, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) == -1) {
-        perror("connect");
-        exit(errno);
-    }
-
-    msg_t messagio;// alloca spazio per il msg + error control
-    if ((messagio.str = malloc(BUFSIZE)) == NULL) {
-        perror("malloc");
-        exit(errno);
-    }
-    instr_t *char_h = malloc(sizeof(instr_t));
-
-    int char_r = 0, char_R = 0, char_p = 0, char_c = 0, char_u = 0, char_l = 0, char_t = 0, char_d = 0, char_f = 0, char_w = 0, char_W = 0;
+    // Initialize char variable of each option
+    command_t *char_h, *char_r, *char_R, *char_p, *char_c, *char_u, *char_l, *char_t, *char_d, *char_f, *char_w, *char_W;
+    command_t **lst_char_abc;
+    CHECK_EXIT("calloc lst", lst_char_abc, calloc(LST_SZ, sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
+    memset(lst_char_abc, 0, LST_SZ);
+    int i = 0;
     int opt;
-    while ((opt = getopt(argc, argv, "p:c:u:h l:t:d:R:r:f:w:W")) != -1) { // salta quelle parti che non sono '-n'
+    extern char *optarg;
+    extern int optopt;
+    initCommand(&char_h);
+    initCommand(&char_r);
+    initCommand(&char_R);
+    initCommand(&char_p);
+    initCommand(&char_c);
+    initCommand(&char_u);
+    initCommand(&char_l);
+    initCommand(&char_t);
+    initCommand(&char_d);
+    initCommand(&char_f);
+    initCommand(&char_W);
+    initCommand(&char_w);
+
+    while ((opt = getopt(argc, argv, "p c:u:h l:t:d:R:r:f:w:W")) != -1) {
         switch (opt) {
             case 'h':
-                char_h->command = 1;
-                printf("connect h\n");
+                upgradeCommand(&char_h, lst_char_abc, i, optarg);
                 break;
-            /* ---- under construction init ----*/
             case 'r':
-                printf("connect r\n");
-                char_r = 1;
+                upgradeCommand(&char_r, lst_char_abc, i, optarg);
                 break;
             case 'R':
-                printf("connect R");
-                char_R = 1;
+                upgradeCommand(&char_R, lst_char_abc, i, optarg);
                 break;
             case 'p':
-                printf("connect p");
-                char_p = 1;
+                printf("connect p : %s\n", optarg);
+                upgradeCommand(&char_p, lst_char_abc, i, optarg);
                 break;
             case 'c':
-                printf("connect c");
-                char_c = 1;
+                printf("connect c : %s\n", optarg);
+                upgradeCommand(&char_c, lst_char_abc, i, optarg);
                 break;
             case 'u':
-                printf("connect u");
-                char_u = 1;
+                printf("connect u : %s\n", optarg);
+                upgradeCommand(&char_u, lst_char_abc, i, optarg);
                 break;
             case 'l':
-                printf("connect l");
-                char_l = 1;
+                printf("connect l : %s\n", optarg);
+                upgradeCommand(&char_l, lst_char_abc, i, optarg);
                 break;
             case 't':
-                printf("connect t");
-                char_t = 1;
+                printf("connect t : %s\n", optarg);
+                upgradeCommand(&char_t, lst_char_abc, i, optarg);
                 break;
             case 'd':
-                printf("connect d");
-                char_d = 1;
+                printf("connect d : %s\n", optarg);
+                upgradeCommand(&char_d, lst_char_abc, i, optarg);
                 break;
             case 'f':
-                printf("connect f");
-                char_f = 1;
+                printf("connect f : %s\n", optarg);
+                upgradeCommand(&char_f, lst_char_abc, i, optarg);
                 break;
             case 'W':
-                printf("connect W");
-                char_W = 1;
+                printf("connect W : %s\n", optarg);
+                upgradeCommand(&char_W, lst_char_abc, i, optarg);
                 break;
             case 'w':
-                printf("connect w");
-                char_w = 1;
+                printf("connect w : %s\n", char_w->param);
+                upgradeCommand(&char_w, lst_char_abc, i, optarg);
                 break;
 //            case ':': {
 //                printf("l'opzione '-%c' richiede un argomento\n", optopt);
@@ -122,27 +132,44 @@ int main(int argc, char *argv[]) {
             }
             default:
                 printf("default\n");
-            /* ---- code under construction fine ----*/
+        }
+        ++i;
+    }
+    int cond = 1;
+    while (cond) {
+        if (char_h->option) {
+            PRINT_H
+            char_h->option = 0;
+        } else {
+            if (char_r->option) {
+                printf("char_r connected with param : %s\n", char_r->param);
+                char_r->option = 0;
+            } else if (char_W->option) {
+                printf("char_W connected with param : %s\n", char_W->param);
+                char_W->option = 0;
+            } else if (char_c->option) {
+                printf("char_c connected with param : %s\n", char_c->param);
+                char_c->option = 0;
+            } else if (char_d->option) {
+                if (char_r->option || char_R->option) {
+                    printf("r o R con d\n");
+                } else {
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                cond = 0;
+            }
         }
     }
-
-    if (char_h->command) { // test of connection with server
-        messagio.str = "from Client : Usage: ./client -<comando1> <args> ...\n";
-        messagio.len = (int) strlen(messagio.str);
-        write(fd_c, &messagio.len, sizeof(int));
-        write(fd_c, messagio.str, messagio.len);
-        printf("message wirtten to server\n");
-        int sz;
-        char buffer[BUFSIZE];
-        read(fd_c, &sz, sizeof(int));
-        read(fd_c, buffer, sz);
-        printf("message ricieve : %s\n", buffer);
-        return EXIT_SUCCESS;
+    fprintf(stderr, "\n");
+    if (closeConnection(SOCKNAME) == -1) { // chiedo al server di chiudere la connessione con questo client
+        fprintf(stderr, "Close connection error\n");
     } else {
-        printf("other\n");
+        fprintf(stderr, "Close connection no problem\n");
     }
-
-//    close(fd_c); // il client chiude il suo canale
-//    exit(EXIT_SUCCESS);
+    freer(lst_char_abc, LST_SZ);
+    fprintf(stderr, "\n");
+    close(fd_c); // il client chiude il suo canale
+    return EXIT_SUCCESS;
 
 }
