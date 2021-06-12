@@ -1,9 +1,9 @@
 #ifndef API_H
 #define API_H
+
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <linux/limits.h>
 #include <errno.h>
 
 #include "util.h"
@@ -13,30 +13,13 @@
 
 int fd_c;
 
-char *realpath(const char *path, char *resolved_path);
-
-static inline int find_absolute_path(char* pathname){ // funzione di controllo path assoluto
-    char *buf = pathname;
-    char * abslotue_path;
-    CHECK_EXIT("calloc", abslotue_path, calloc(PATH_MAX+1, sizeof(char)), NULL)
-    abslotue_path = realpath(buf, NULL);
-    if(abslotue_path == NULL || errno==ENOENT){
-        printf("cannot find file with name[%s]\n", buf);
-        free(abslotue_path);
-        return -1;
-    } else{
-        printf("path[%s]\n", abslotue_path);
-        free(abslotue_path);
-        return 0;
-    }
-}
 
 //static inline int openConnection(const char *sockname, int msec, const struct timespec abstime);
 
 //         versione semplificata della openConnection()
 static inline int simple_opneConnection(const char *sockname, int msec, int maxtime) {
 
-    if (find_absolute_path((char*)sockname) == -1) {
+    if (find_absolute_path((char*)sockname, NULL) == -1) {
         exit(EXIT_FAILURE);
     }
     CHECK_EXIT("socket", fd_c, socket(AF_UNIX, SOCK_STREAM, 0), -1)
@@ -65,48 +48,69 @@ static inline int simple_opneConnection(const char *sockname, int msec, int maxt
     return -1;
 }
 
-// api_id = 1
+// api_id = 2
 static inline int closeConnection(const char *sockname) { // chiusura connessione col server
     //------- Parte di scrittura del messaggio -------
 
-    if (find_absolute_path((char*)sockname) == -1) {
-        exit(EXIT_FAILURE);
+    if (find_absolute_path((char*)sockname, NULL) == -1) {
+        return -1;
     }
-
-    printf("sockname : %s\n", sockname);
-    msg_t *sms_write;
-    CHECK_EXIT("calloc sms_write", sms_write, calloc(1, sizeof(msg_t)), NULL)
-    sms_write->len = 3 + strlen(sockname); // 3 = per il id della funzione dell'api
-    CHECK_EXIT("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(char)), NULL)
-    memset(sms_write->str, '\0', sms_write->len);
-    strncpy(sms_write->str, "2 ", 3);// api_id
-    strncat(sms_write->str, sockname, strlen(sockname));
-    int notused;
-    CHECK_EXIT("write ClConn size", notused, writen(fd_c, &sms_write->len, sizeof(size_t)), -1)
-    CHECK_EXIT("write ClConn sms", notused, writen(fd_c, sms_write->str, sms_write->len), -1)
-    free(sms_write->str);
-    free(sms_write);
-    printf("Richiesta chiusura socket client inviata...\n");
+    sendMessage_for_server(sockname, NULL, fd_c, "2 ");
     //------- Parte di lettura del messaggio -------
     msg_t *sms_read;
+    int notused;
     CHECK_EXIT("calloc read", sms_read, calloc(1, sizeof(msg_t)), NULL)
     CHECK_EXIT("read ClConn size", notused, readn(fd_c, &sms_read->len, sizeof(size_t)), -1)
     CHECK_EXIT("calloc read", sms_read->str, calloc(1, sms_read->len), NULL)
     CHECK_EXIT("read ClConn sms", notused, readn(fd_c, sms_read->str, sms_read->len), -1)
-    long close_ctrl = strtol(sms_read->str, (char **) NULL, 10);
+    long check_close = strtol(sms_read->str, (char **) NULL, 10);
     free(sms_read->str);
     free(sms_read);
-    return (int) close_ctrl;
+    return (int) check_close;
 }
 
 // api_id = 3
-static inline int openFile(const char *pathname, int flags) {
-    // working progress
+static inline int openFile(const char *pathname, int flags) { // O_CREATE = 1 || only open = 0
+
+    if (find_absolute_path((char*)pathname, NULL) == -1) {
+        return -1;
+    }
+    if (flags == O_CREATE) { // nel caso della write
+        // il server deve vedere se esiste di gia' il file, se si allora invia errore perche non posso creare qualcosa che gia esiste
+        // se no allora il server crea il file e lo apre
+        sendMessage_for_server("1",(char *) pathname, fd_c, "3 ");
+        msg_t *sms_read;
+        int notused;
+        CHECK_EXIT("calloc read", sms_read, calloc(1, sizeof(msg_t)), NULL)
+        CHECK_EXIT("read ClConn size", notused, readn(fd_c, &sms_read->len, sizeof(size_t)), -1)
+        CHECK_EXIT("calloc read", sms_read->str, calloc(1, sms_read->len), NULL)
+        CHECK_EXIT("read ClConn sms", notused, readn(fd_c, sms_read->str, sms_read->len), -1)
+        long check_close = strtol(sms_read->str, (char **) NULL, 10);
+        free(sms_read->str);
+        free(sms_read); // se check close est 0 allora a creato il file senza problemi
+        return 0;
+    } else {// per qualsiasi altra cosa non e' giusto
+        return 0;
+    }//Aperto alla lettura e alla scrittura.
+    // Il file viene creato se non esiste, altrimenti viene troncato.
+    // Il flusso è posizionato all'inizio del file.
 }
 
 // api_id = 4
-static inline int readFile(const char *pathname, int flags) {
+static inline int readFile(const char *pathname, void ** buf, size_t * size) {
     // working progress
+    return 0;
+}
+
+// api_id = 5
+static inline int readNFiles(int N, const char* dirname) {
+    // working progress
+    return 0;
+}
+// api_id = 6
+static inline int writeFile(const char *pathname, const char *dirname) {
+    // working progress
+    return 0;
 }
 
 #endif //API_H
