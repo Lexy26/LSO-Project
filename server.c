@@ -1,8 +1,7 @@
 /*-------------------FILE STORAGE SERVER-------------------*/
 
-//#define _POSIX_C_SOURCE  200112L
+#define _POSIX_C_SOURCE  200112L
 //#include <unistd.h>
-//#include <ctype.h>
 //#include <sys/uio.h>
 #include <sys/select.h>
 #include <stdio.h>
@@ -13,14 +12,18 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "configuration.h"
 #include <unistd.h>
 #include <assert.h>
+
+#include "configuration.h"
 #include "util.h"
 #include "conn.h"
+#include "file_storage.h"
+#include "util_server.h"
 
 
 #define BUFSIZE 256
+
 
 typedef struct {
     pthread_t thid;
@@ -43,8 +46,12 @@ void *threadW() {
 int main(int argc, char *argv[]) {
     unlink(SOCKNAME);
     config_t *cfg = malloc(sizeof(config_t));
-    configuration(argc, argv, cfg);
+    configuration(argc, argv, &cfg);
 
+    // create storage
+    info_storage_t *storage;
+    CHECK_EXIT("calloc storage", storage, calloc(1, sizeof(info_storage_t)), NULL)
+    storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
     /*------ THREAD WORKER INITIALIZER ------*/
     // (_______fare in seguito un controllo di thread W se occupato o no______)
@@ -61,6 +68,7 @@ int main(int argc, char *argv[]) {
 
     }
     //printf("creato i thread\n");
+
 
     int fd_server;
     if ((fd_server = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {  // creo il socket
@@ -109,52 +117,32 @@ int main(int argc, char *argv[]) {
                     FD_CLR(fd, &set);// lo tolgo dall'insieme dei descrittori
                     if (fd == fd_max) fd_max = updatemax(set, fd_max); // aggiorno il max
 
-                    /*-------------- CLOSE CONNECTION Request --------------*/
+                    /*-------------- Request received --------------*/
                     // Parte di lettura del messaggio
-                    int notused;
-                    msg_t *sms_read;
-                    CHECK_EXIT("calloc read", sms_read, calloc(1, sizeof(msg_t)), NULL)
-                    CHECK_EXIT("read ClConn size", notused, readn(fd, &sms_read->len, sizeof(size_t)), -1)
-                    CHECK_EXIT("calloc read", sms_read->str, calloc(1, sms_read->len), NULL)
-                    CHECK_EXIT("read ClConn sms", notused, readn(fd, sms_read->str, sms_read->len), -1)
-                    printf("message recieve : %s\n", sms_read->str);
-                    //    TOKENIZZO i valori nella stringa per estrapolare le info inviate dal client
-                    char *tmp;
-                    char *token = strtok_r(sms_read->str, " ", &tmp);
-                    long api_id = strtol(token, NULL, 10);
-                    printf("api id : %ld\n", api_id);
-
-                    // vedo a quale richiesta corrisponde attraverso l'api_id
-
-                    if (api_id == 2) { // ovvero CloseConnection()
-                        // QUI controlla che sockname corrisponda a quello con cui il client e' stato aperto
-                        token = strtok_r(NULL, " ", &tmp);
-                        printf("token : %s\n", token);
-                        msg_t *sms_write;
-                        CHECK_RETURN("calloc sms_write", sms_write, calloc(1, sizeof(msg_t)), NULL)
-                        if (strncmp(token, SOCKNAME, strlen(SOCKNAME)) == 0) {
-                            sms_write->len = strlen("1");
-                            CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(char)), NULL)
-                            memset(sms_write->str, '\0', sms_write->len);
-                            sms_write->str = "1";
-                        } else {
-                            sms_write->len = strlen("-1"); // 3 = per il id della funzione dell'api
-                            CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(char)), NULL)
-                            memset(sms_write->str, '\0', sms_write->len);
-                            sms_write->str = "-1";
-                        }
-                        // Parte di scrittura del messaggio
-                        CHECK_EXIT("write ClConn size", notused, writen(fd, &sms_write->len, sizeof(size_t)), -1)
-                        CHECK_EXIT("write ClConn sms", notused, writen(fd, sms_write->str, sms_write->len), -1)
-                        printf("Chiusura socket client : %d\n\n", fd);
-                        close(fd);
-                        /*-------------- CLOSE CONNECTION Request FINE --------------*/
-
+                    unsigned char * sms;
+                    recievedMsg_ServerToClient(&sms, fd);
+                    printf("contenuto del sms : ---- %s ----\n", sms);
+                    sms_arg  * smsArg;
+                    CHECK_EXIT("calloc smsArg", smsArg, calloc(1, sizeof(char)), NULL)
+                    char * tmp;
+                    char * token = strtok_r((char *) sms, ",", &tmp); // api_id +resto
+                    smsArg->api_id = strtol(token, NULL, 10);
+                    smsArg->sms_info = tmp;
+                    smsArg->fd_client_id = fd;
+                    if (smsArg->api_id ==  5) {
+                        int n;
+                        token = strtok_r(NULL, ",", &tmp); // token = pathname, tmp, size
+                        long sz = strtol(tmp, NULL, 10);
+                        CHECK_EXIT("read ClConn size", n, readn(fd, &smsArg->sms_content, sz), -1)
+                    } else {
+                        smsArg->sms_content = NULL;
                     }
+                    // Qui metto la richiesta nella coda che poi verra' data al thread
+                    threadF(smsArg);
 
                     // Manca la parte della coda e dei thread worker
 
-                    // devo rimettere il client a disposizione nel manager
+                    // devo rimettere il client a disposizione nel set della select, attraverso il file descr pipe
 
 
                 }

@@ -9,13 +9,28 @@
 #define SOCKNAME "./cs_sock"
 #endif
 
-//#include "conn.h"
-
 // struct messaggio utile per far comunicare client-server
 typedef struct {
     size_t len;
-    char *str;
+    unsigned char *str;
 } msg_t;
+
+// struct utile al client
+typedef struct {
+    char option[2];
+    char *param; // optarg, cio' che sta dopo l'opzione
+    char * dirname;
+} command_t;
+
+// struct utile al client
+typedef struct {
+    int tot_request;
+    int char_t;
+    int char_h;
+    int char_p;
+    char* char_f;
+    command_t ** lst_char_abc;
+}nb_request;
 
 // check del valore con uscita
 #define CHECK_EXIT(name, var, sc, check)    \
@@ -30,14 +45,24 @@ typedef struct {
     int err = errno;                          \
     errno = err;\
     }
+int sendMsg_ClientToServer_Append(int fd_c, char api_id[3], char *arg1, char * arg2, unsigned char* arg3);
 
-int sendMessage_for_server(const char *sockname_or_flag, char *path_files, int fd_c, char api_id[3]);
+int sendMsg_ClientToServer(int fd_c, char api_id[3], char *arg1, char * arg2);
+
+int sendMsg_ServerToClient(int fd_client,unsigned char * arg1, unsigned char * arg2, unsigned char* arg3);
 
 int isdot(const char dir[]);
 
-int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, long *ram_sz, int *index);
+int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int *index);
 
 int find_absolute_path(char* pathname, char **abs_path);
+
+void recievedMsg_ServerToClient(unsigned char ** messaggio,int fd_c);
+
+void recievedMsg_ServerToClient_Read(char ** pathname, unsigned char** sms_content, size_t * size_buf,int * check, int fd_c);
+//int writeCommand(nb_request **pNbRequest, char * filename);
+
+void recievedMsg_ClientToServer(unsigned char ** sms_info, int fd_c);
 
 // cio' che -h stampera' in stdout
 #define PRINT_H printf("\nFile Storage Server - Progetto di Laboratorio di Sistemi Operativi 2020/2021\n");\
