@@ -44,6 +44,8 @@ int simple_opneConnection(const char *sockname, int msec, int maxtime) {
             return fd_c;
         }
     }
+    printf("fd_c :: %d\n", fd_c);
+
     return -1;
 }
 
@@ -56,6 +58,7 @@ int closeConnection(const char *sockname) { // chiusura connessione col server
     //------- Parte di lettura del messaggio -------
     unsigned char * check_str;
     recievedMsg_ServerToClient(&check_str, fd_c);
+    printf("check_str close : %s\n", check_str);
     int check_int = (int) strtol((char*) check_str,  NULL, 10);
     free(check_str);
     close(fd_c);
@@ -64,21 +67,24 @@ int closeConnection(const char *sockname) { // chiusura connessione col server
 }
 
 // api_id = 2 --- OpenFile -> api_id + pathname +  flag
-int openFile(const char *pathname, int flags) { // O_CREATE = 1 || only open = 0
-    char api_id[3] = "2,";
+int openFile(const char *pathname, int flags) { // O_CREATE = 1 || O_OPEN = 0
+    char api_id[3];
+    strncpy(api_id, "2,", 3);
     if (flags == O_CREATE) {// creare file, se gia esiste errore
         // il server crea il file e lo apre
-        char flagcreate[2] = "1";
+        char flagcreate[2];
+        strncpy(flagcreate, "1", 2);
         sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, flagcreate);
-    } else if(flags == O_OPEN) {// apre file
+    } else if(flags == O_OPEN) {// apre file gia' esistente
         char flagopen[2] = "0";
+        strncpy(flagopen, "0", 2);
         sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, flagopen);
     }
     //------- Parte di lettura del messaggio -------
     unsigned char * sms_read;
     recievedMsg_ServerToClient(&sms_read, fd_c);
     int check_int = (int) strtol((char *) sms_read, NULL, 10);
-    free(sms_read); // se check close est 0 allora a creato il file senza problemi
+    free(sms_read);
     return (int) check_int;
 }
 
@@ -88,8 +94,10 @@ int readFile(const char *pathname, void ** buf, size_t * size) {
     char api_id[3] = "3,";
     sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, NULL);    // ricevo il msg con la size e il contenuto
     int check;
-    recievedMsg_ServerToClient_Read(NULL,(unsigned char **) buf, size, &check, fd_c);
-    if (check == 0) {
+    printf("aspettando una risposta...\n");
+    char * path;
+    recievedMsg_ServerToClient_Read(&path,(unsigned char **) buf, size, &check, fd_c);
+    if (check == 0 || check == 1) {
         return 0;
     } else {
         // settare errno
@@ -103,7 +111,7 @@ int readNFiles(int N, const char* dirname) {
     char n[BUFSIZE];
     sprintf(n, "%d", N);
     // invio la richiesta di lettura al server
-    sendMsg_ClientToServer(fd_c, api_id, n, NULL);    // ricevo il msg con la size e il contenuto
+    sendMsg_ClientToServer(fd_c, api_id, n, NULL);
     int file_reading = 1;
     while (file_reading) {
         // ricevo il msg con la size e il contenuto
@@ -113,20 +121,26 @@ int readNFiles(int N, const char* dirname) {
         int check;
         recievedMsg_ServerToClient_Read(&path, &sms_content, &size_buf, &check, fd_c);
         if (dirname != NULL && check == 1) {
-            // inserisco il file ricevuto dal server nella directory
+            // inserisco il file ricevuto dal server nella directory data
             char *base = basename(path);
-            strncat((char *)dirname, base, strlen(base)); // in modo da dire dove creare direttamente nella direcotry il file
-            FILE *f = fopen(dirname, "wb"); // creo un file per scriverci dentro
-            fwrite(sms_content, size_buf-1, 1, f);
+            char * filename = malloc((strlen(dirname) +2+ strlen(base))* sizeof(unsigned char));
+            memset(filename, 0,(strlen(dirname) +2+ strlen(base)));
+            strncpy(filename, dirname, strlen(dirname));
+            strncat(filename, "/", strlen("/")+1);
+            strncat(filename, base, strlen(base)+1);
+            FILE *f = fopen(filename, "wb");
+            if(fwrite(sms_content, size_buf, 1, f)==-1){
+                perror("fwrite");
+            }
             fclose(f);
-
         } else if (check == 0){
+            printf("FINE Lettura\n");
             file_reading = 0; // ovvero non ci sono piu file da leggere
-        } else { //se c'e' stato un qualche errore
+        } else if(check == -1) { //se c'e' stato un qualche errore
             // settare errno ooprtunamente con una macro
             return -1;
         }
-        free(path);
+        //free(path);
         free(sms_content);
     }
     return 0;
@@ -135,20 +149,25 @@ int readNFiles(int N, const char* dirname) {
 // api_id = 5
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
     char api_id[3] = "5,";
-    sendMsg_ClientToServer_Append(fd_c, api_id, (char *) pathname,( char *) size, buf);
+    char size_char[BUFSIZE];
+    sprintf(size_char, "%zu", size);
+    sendMsg_ClientToServer_Append(fd_c, api_id, (char *) pathname, size_char, buf);
     // ricevo il msg con la size e il contenuto
+    printf("aspettando la APPEND risposta...\n");
     unsigned char * sms_recieved;
     recievedMsg_ServerToClient(&sms_recieved, fd_c); // check + lista pathname dei file espulsi
-
+    printf("risposta ricevuta : %s\n", sms_recieved);
     char * tmp;
     char * token = strtok_r((char *) sms_recieved, ",", &tmp);
     size_t check = strtol(token, NULL, 10);
-    if (check == 1) {
-        token = strtok_r(NULL, ",", &tmp);
-        printf("file espulsi : \n");
-        while (token) {
-            printf(" - Path File : %s\n", token);
+    if (check == 0) {
+        if(tmp != NULL) {
             token = strtok_r(NULL, ",", &tmp);
+            printf("file espulsi : \n");
+            while (token) {
+                printf(" - Path File : %s\n", token);
+                token = strtok_r(NULL, ",", &tmp);
+            }
         }
     } else {
         free(sms_recieved);
@@ -167,7 +186,8 @@ int closeFile(const char * pathname) {
     unsigned char * sms;
     recievedMsg_ServerToClient(&sms, fd_c);
     size_t check = strtol((char *) sms, NULL, 10);
-    if (check != -1) {
+    printf("sms CLOSE ricevuto : %zu\n", check);
+    if (check == -1) {
         // settare errno opportumanete
         free(sms);
         return -1;

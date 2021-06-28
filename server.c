@@ -14,6 +14,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <assert.h>
+#include <sys/stat.h>
 
 #include "configuration.h"
 #include "util.h"
@@ -88,6 +89,11 @@ int main(int argc, char *argv[]) {
         perror("listen");
         exit(errno);
     }
+    int pipe_fd[2]; // qui creo la pipe
+    if (pipe(pipe_fd) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
 
     int fd_max = 0;
     fd_set set, tmpset;
@@ -96,14 +102,21 @@ int main(int argc, char *argv[]) {
     FD_ZERO(&set);
     FD_ZERO(&tmpset);
     FD_SET(fd_server, &set);// sara' il descr. su cui faro' nuove connessioni, quindi accept()
-    printf("Waiting for connetions...\n");
+    FD_SET(pipe_fd[0], &set); // per la lettura
+
     while (1) {
+        //printf("okayyyyy\n");
+        printf("Waiting for connetions...\n");
+
         tmpset = set;// necessario perche' select modifica il master set
         if (select(fd_max + 1, &tmpset, NULL, NULL, NULL) == -1) {
             perror("select");
             exit(errno);
         }
         for (int fd = 0; fd <= fd_max; ++fd) {
+            //printf("fd in atto :: %d\n", fd);
+            struct stat fd_stat;
+            fstat(fd, &fd_stat);
             if (FD_ISSET(fd, &tmpset)) {
                 int fd_client;
                 if (fd == fd_server) {
@@ -111,7 +124,16 @@ int main(int argc, char *argv[]) {
                     printf("Connected !\n");
                     FD_SET(fd_client, &set);// aggiunggo connection a master set
                     if (fd_client > fd_max) fd_max = fd_client;
-                }// else if (pipe) continue; MANCA controllo pipe
+                } else if (S_ISFIFO(fd_stat.st_mode)) {
+                    //int leggi = 1;
+                    int fd_client_read;
+                    readn(fd, &fd_client_read, sizeof(int));
+                    printf(" fd_client ritornato nella select letto : %d\n", fd_client_read);
+                    // qui dovrei credo fare un while dove dovrei iterare il fdlst, per poi
+                    // reinserire i client che stanno nella lista
+                    FD_SET(fd_client_read, &set);
+                    if (fd_client_read > fd_max) fd_max = fd_client_read;
+                }//continue; MANCA controllo pipe, il quale lo faccio con una stat
                 else { // se richiesta disponibile
                     printf("else\n");
                     FD_CLR(fd, &set);// lo tolgo dall'insieme dei descrittori
@@ -120,25 +142,31 @@ int main(int argc, char *argv[]) {
                     /*-------------- Request received --------------*/
                     // Parte di lettura del messaggio
                     unsigned char * sms;
+                    printf("fd :%d\n", fd);
                     recievedMsg_ServerToClient(&sms, fd);
                     printf("contenuto del sms : ---- %s ----\n", sms);
                     sms_arg  * smsArg;
-                    CHECK_EXIT("calloc smsArg", smsArg, calloc(1, sizeof(char)), NULL)
+                    CHECK_EXIT("malloc smsArg", smsArg, malloc(sizeof(sms_arg)), NULL)
+                    memset(smsArg, 0, sizeof(sms_arg));
                     char * tmp;
                     char * token = strtok_r((char *) sms, ",", &tmp); // api_id +resto
                     smsArg->api_id = strtol(token, NULL, 10);
                     smsArg->sms_info = tmp;
                     smsArg->fd_client_id = fd;
+                    smsArg->pipe_fd = pipe_fd[1];
                     if (smsArg->api_id ==  5) {
                         int n;
                         token = strtok_r(NULL, ",", &tmp); // token = pathname, tmp, size
                         long sz = strtol(tmp, NULL, 10);
-                        CHECK_EXIT("read ClConn size", n, readn(fd, &smsArg->sms_content, sz), -1)
+                        smsArg->size_buf = sz;
+                        CHECK_EXIT("malloc smsArg", smsArg->sms_content, calloc(sz+1, sizeof(unsigned char)), NULL) // problema con il +1 o altro
+                        CHECK_EXIT("read api_id 5", n, readn(fd, smsArg->sms_content, sz), -1) // problema con il +1 o altro
+                        //printf("sms content : %s", smsArg->sms_content);
                     } else {
                         smsArg->sms_content = NULL;
                     }
                     // Qui metto la richiesta nella coda che poi verra' data al thread
-                    threadF(smsArg);
+                    threadF(smsArg, &storage);
 
                     // Manca la parte della coda e dei thread worker
 
@@ -146,6 +174,7 @@ int main(int argc, char *argv[]) {
 
 
                 }
+                //printf("okay\n");
             }
         }
 

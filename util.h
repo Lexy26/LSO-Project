@@ -6,7 +6,7 @@
 #endif
 
 #if !defined(SOCKNAME)
-#define SOCKNAME "./cs_sock"
+#define SOCKNAME "/tmp/cs_sock"
 #endif
 
 // struct messaggio utile per far comunicare client-server
@@ -18,7 +18,7 @@ typedef struct {
 // struct utile al client
 typedef struct {
     char option[2];
-    char *param; // optarg, cio' che sta dopo l'opzione
+    char *param; // optarg, cio' che sta dopo l'opzione opt
     char * dirname;
 } command_t;
 
@@ -47,22 +47,14 @@ typedef struct {
     }
 int sendMsg_ClientToServer_Append(int fd_c, char api_id[3], char *arg1, char * arg2, unsigned char* arg3);
 
+
 int sendMsg_ClientToServer(int fd_c, char api_id[3], char *arg1, char * arg2);
 
-int sendMsg_ServerToClient(int fd_client,unsigned char * arg1, unsigned char * arg2, unsigned char* arg3);
-
-int isdot(const char dir[]);
-
-int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int *index);
-
-int find_absolute_path(char* pathname, char **abs_path);
 
 void recievedMsg_ServerToClient(unsigned char ** messaggio,int fd_c);
 
-void recievedMsg_ServerToClient_Read(char ** pathname, unsigned char** sms_content, size_t * size_buf,int * check, int fd_c);
-//int writeCommand(nb_request **pNbRequest, char * filename);
 
-void recievedMsg_ClientToServer(unsigned char ** sms_info, int fd_c);
+void recievedMsg_ServerToClient_Read(char ** pathname, unsigned char** sms_content, size_t * size_buf,int * check, int fd_c);
 
 // cio' che -h stampera' in stdout
 #define PRINT_H printf("\nFile Storage Server - Progetto di Laboratorio di Sistemi Operativi 2020/2021\n");\

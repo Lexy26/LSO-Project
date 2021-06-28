@@ -7,7 +7,7 @@ CCFLAGS	        += -std=c99 -Wall -g -Werror
 # gli include sono nella dir. corrente
 # INCLUDES	= -I.
 
-OBJ_CLIENT = util.o conn.o API.o configuration.o
+OBJ_CLIENT = util.o API.o util_client.o
 
 OBJ_SERVER = file_storage.o util_server.o util.o conn.o configuration.o
 
@@ -19,22 +19,31 @@ client: client.c $(OBJ_CLIENT)
 
 # ----------Per Debuggare------------
 vos:
-	valgrind ./server -F config.txt
+	valgrind --leak-check=full --track-origins=yes --show-leak-kinds=all ./server -F config.txt
+
+#-w /home/nessy/Desktop/Savetmp,n=5
+#-W client.c,server.c
+#-R n=0
+#-d /home/nessy/CLionProjects/Progetto-LSO/YOLO -r client.c,server.c
 
 voc:
-	valgrind ./client -r pippo
+	valgrind --leak-check=full ./client -W client.c,server.c -d /home/nessy/CLionProjects/Progetto-LSO/YOLO -R #  --track-origins=yes --show-leak-kinds=all
 
 outs:
 	./server -F config.txt
 
 outc:
-	./client -r pippo
+	./client -w /home/nessy/Desktop/Savetmp,n=0
 # -----------------------------------
 
-file_storage.o: file_storage.c file_storage.h
+util_client.o: util_client.c util_client.h API.o
+	$(CC) $(CCFLAGS) -c util_client.c
+
+
+file_storage.o: file_storage.c file_storage.h util.o
 	$(CC) $(CCFLAGS) -c file_storage.c
 
-util_server.o: util_server.c util_server.h util.o conn.o
+util_server.o: util_server.c util_server.h util.o conn.o file_storage.o
 	$(CC) $(CCFLAGS) -c util_server.c
 
 util.o: util.c util.h conn.o
@@ -43,7 +52,7 @@ util.o: util.c util.h conn.o
 conn.o: conn.c conn.h
 	$(CC) $(CCFLAGS) -c conn.c
 
-API.o: API.c API.h conn.o util.o
+API.o: API.c API.h util.o
 	$(CC) $(CCFLAGS) -c API.c
 
 configuration.o: configuration.c configuration.h
