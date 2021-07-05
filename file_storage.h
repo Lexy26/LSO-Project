@@ -2,6 +2,8 @@
 #ifndef FILE_STORAGE_H
 #define FILE_STORAGE_H
 
+#define TIMER 10
+#define SLEEP_TIME 0.0001
 
 // struttura per le info su un determinato file
 typedef struct node {
@@ -24,6 +26,7 @@ typedef struct {
     long nfile_dispo;
     struct node *head;
     struct node *last;
+    pthread_mutex_t lock;
 } info_storage_t;
 
 struct node *createFileNode(char * pathname, int fd); // long key
@@ -32,22 +35,22 @@ struct node *createFileNode(char * pathname, int fd); // long key
 info_storage_t *createStorage(long ram, long nfile);
 
 
-int removeFile(struct node **file_remove, char ** pathname_removed, info_storage_t **storage);
+int removeFile(struct node **file_remove, char ** pathname_removed, info_storage_t **storage, struct node ** current_file);
 
 
-int searchFileNode(char * pathname, info_storage_t * storage, struct node ** file_found);
+int searchFileNode(char * pathname, info_storage_t ** storage, struct node ** file_found);
 
 
-int insertFileNode(struct node ** node_to_insert, info_storage_t **storage, char ** pathname_removed);
+int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path);
+
+
+int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content);
 
 
 int removeSpecificFile(char * pathname, info_storage_t ** storage, char ** pathname_removed);
 
 
-int updateFileNode(info_storage_t **storage, unsigned char * content, long size_buf, struct node ** node_to_insert, int fd_current);
-
-
-int printStorage(info_storage_t * storage);
+int printStorage(info_storage_t ** storage);
 
 
 int freerStorage(info_storage_t ** storage);

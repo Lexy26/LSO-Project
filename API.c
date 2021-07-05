@@ -14,6 +14,8 @@
 #include "util.h"
 #include "API.h"
 
+#define test 1
+
 int fd_c;
 
 //static inline int openConnection(const char *sockname, int msec, const struct timespec abstime);
@@ -30,7 +32,6 @@ int simple_opneConnection(const char *sockname, int msec, int maxtime) {
 
     while (maxtime) { // ciclo con maxtime limite per aspettare una connessione col server
         // check del timer
-        printf("client prova a connettersi\n");
         errno = 0;
         int connected;
         CHECK_RETURN("connect", connected, connect(fd_c, (struct sockaddr *) &serv_addr, sizeof(serv_addr)), -1)
@@ -52,11 +53,14 @@ int simple_opneConnection(const char *sockname, int msec, int maxtime) {
 // api_id = 1 OKAY
 int closeConnection(const char *sockname) { // chiusura connessione col server
     //------- Parte di scrittura del messaggio -------
+#if test == 1
     printf("Closing socket connection \n");
+#endif
     char api_id[3] = "1,";
     sendMsg_ClientToServer(fd_c, api_id, (char *) sockname, NULL);
     //------- Parte di lettura del messaggio -------
     unsigned char * check_str;
+    printf("sms rec\n");
     recievedMsg_ServerToClient(&check_str, fd_c);
     printf("check_str close : %s\n", check_str);
     int check_int = (int) strtol((char*) check_str,  NULL, 10);
@@ -94,7 +98,9 @@ int readFile(const char *pathname, void ** buf, size_t * size) {
     char api_id[3] = "3,";
     sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, NULL);    // ricevo il msg con la size e il contenuto
     int check;
+#if test == 1
     printf("aspettando una risposta...\n");
+#endif
     char * path;
     recievedMsg_ServerToClient_Read(&path,(unsigned char **) buf, size, &check, fd_c);
     if (check == 0 || check == 1) {
@@ -113,6 +119,7 @@ int readNFiles(int N, const char* dirname) {
     // invio la richiesta di lettura al server
     sendMsg_ClientToServer(fd_c, api_id, n, NULL);
     int file_reading = 1;
+    printf("n file : %s\n", n);
     while (file_reading) {
         // ricevo il msg con la size e il contenuto
         unsigned char * sms_content;
@@ -120,7 +127,9 @@ int readNFiles(int N, const char* dirname) {
         size_t size_buf;
         int check;
         recievedMsg_ServerToClient_Read(&path, &sms_content, &size_buf, &check, fd_c);
+        printf("- file read : %s\n", path);
         if (dirname != NULL && check == 1) {
+            //printf( "Inserimento nella Directory \"%s\"\n", dirname);
             // inserisco il file ricevuto dal server nella directory data
             char *base = basename(path);
             char * filename = malloc((strlen(dirname) +2+ strlen(base))* sizeof(unsigned char));
@@ -134,7 +143,9 @@ int readNFiles(int N, const char* dirname) {
             }
             fclose(f);
         } else if (check == 0){
+#if test == 1
             printf("FINE Lettura\n");
+#endif
             file_reading = 0; // ovvero non ci sono piu file da leggere
         } else if(check == -1) { //se c'e' stato un qualche errore
             // settare errno ooprtunamente con una macro
@@ -153,26 +164,29 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     sprintf(size_char, "%zu", size);
     sendMsg_ClientToServer_Append(fd_c, api_id, (char *) pathname, size_char, buf);
     // ricevo il msg con la size e il contenuto
-    printf("aspettando la APPEND risposta...\n");
     unsigned char * sms_recieved;
     recievedMsg_ServerToClient(&sms_recieved, fd_c); // check + lista pathname dei file espulsi
+#if test == 1
     printf("risposta ricevuta : %s\n", sms_recieved);
+#endif
     char * tmp;
     char * token = strtok_r((char *) sms_recieved, ",", &tmp);
     size_t check = strtol(token, NULL, 10);
     if (check == 0) {
-        if(tmp != NULL) {
-            token = strtok_r(NULL, ",", &tmp);
-            printf("file espulsi : \n");
+        token = strtok_r(NULL, ",", &tmp);
+        if(token != NULL) { //  && strlen((char *) sms_recieved) > 1
+            printf("file espulsi :\n");
             while (token) {
-                printf(" - Path File : %s\n", token);
+                printf(" - %s\n", token);
                 token = strtok_r(NULL, ",", &tmp);
             }
         }
     } else {
         free(sms_recieved);
+        printf("\n");
         return -1;
     }
+    printf("\n");
     free(sms_recieved);
     return 0;
 }
@@ -186,7 +200,6 @@ int closeFile(const char * pathname) {
     unsigned char * sms;
     recievedMsg_ServerToClient(&sms, fd_c);
     size_t check = strtol((char *) sms, NULL, 10);
-    printf("sms CLOSE ricevuto : %zu\n", check);
     if (check == -1) {
         // settare errno opportumanete
         free(sms);

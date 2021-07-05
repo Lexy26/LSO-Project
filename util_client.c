@@ -13,6 +13,7 @@
 
 #define T_REQUEST 50// limite massimo di richieste possibili da parte di questo client
 #define BUFSIZE 256
+#define test 0
 
 char *realpath(const char *path, char *resolved_path);
 
@@ -64,9 +65,10 @@ void freer(command_t **lst, size_t sz) {
 int find_absolute_path(char* pathname, char **abs_path){ // funzione di controllo path assoluto
     char *buf = pathname;
     char * abslotue_path;
+    errno = 0;
     abslotue_path = realpath(buf, NULL);
     if(abslotue_path == NULL || errno==ENOENT){
-        printf("cannot find file with name[%s]\n", buf);
+        //printf("cannot find file with name[%s]\n", buf);
         //free(abslotue_path);
         return -1;
     } else{
@@ -76,11 +78,10 @@ int find_absolute_path(char* pathname, char **abs_path){ // funzione di controll
     }
 }
 
-void openAppendClose(char * pathname, nb_request ** nbRequest, int index) {
+int openAppendClose(char * pathname, nb_request ** nbRequest, int index) {
     if (openFile(pathname, O_CREATE) != 0) { // se file non sessiste e va creato
         if (openFile(pathname, O_OPEN)==-1) {
-            perror("open append close : Open");
-            exit(errno);
+            return -1;
         }// se file gia esistente
     }
     timer((*nbRequest)->char_t); // poiche openFile est una richiesta
@@ -94,17 +95,20 @@ void openAppendClose(char * pathname, nb_request ** nbRequest, int index) {
     buf[fsize] = 0;
     //printf("file da inserire : %s\n", buf);
     if(appendToFile(pathname, buf, fsize, (*nbRequest)->lst_char_abc[index]->dirname)==-1) {
-        perror("open append close : Append");
-        exit(errno);
+        return -1;
     }
     free(buf);
+#if test == 1
     printf("!!!!!   Elemento inserito   !!!!!!!\n");
+#endif
     timer((*nbRequest)->char_t);
     if(closeFile(pathname)==-1) {
-        perror("open append close : Close");
-        exit(errno);
+        return -1;
     }
+#if test == 1
     printf("!!!!!   Elemento chiuso   !!!!!!!\n");
+#endif
+    return 0;
 }
 
 /*!
@@ -134,7 +138,9 @@ int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, 
         perror("opendir");
         return 1;
     } else {
+#if test == 1
         fprintf(stdout, "------------------Directory %s:-----------------\n", dirname);
+#endif
         struct dirent* ent; // file, directory etc..
         while ((ent = readdir(dir)) != NULL) { // itera e stampa tutto cio che si trova nella cartella dirname
             int lendir = (int) strlen(dirname) + 1;
@@ -149,7 +155,9 @@ int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, 
             struct stat st;
             stat(next_path, &st); // controllo dell'errore, va aggiunto
             if(*nfiles < 1 && *totfile < 0) {
+#if test == 1
                 fprintf(stdout, "-----------------------------------------------\n");
+#endif
                 closedir(dir);
                 return 0;
             } else {
@@ -178,7 +186,9 @@ int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, 
                 }
             }
         }
-        fprintf(stdout, "-----------------------\n");
+#if test == 1
+        fprintf(stdout, "-----------------------------------------------\n");
+#endif
         closedir(dir);
         return 0;
 

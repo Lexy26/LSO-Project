@@ -24,6 +24,10 @@
 
 
 #define BUFSIZE 256
+#define test 0
+
+//pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+queue_t *queue;
 
 
 typedef struct {
@@ -54,13 +58,21 @@ int main(int argc, char *argv[]) {
     CHECK_EXIT("calloc storage", storage, calloc(1, sizeof(info_storage_t)), NULL)
     storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
+    // create Queue Request
+
+    CHECK_EXIT("calloc storage", queue, calloc(1, sizeof(queue_t)), NULL)
+    createQueue(&queue);
+
+    pthread_cond_init(&queue->queue_cond, NULL);
+    pthread_mutex_init(&queue->lock, NULL);
+
     /*------ THREAD WORKER INITIALIZER ------*/
     // (_______fare in seguito un controllo di thread W se occupato o no______)
 
     thread_t *lst_thread[cfg->N_THREAD]; // lista di thread worker
     for (int i = 0; i < cfg->N_THREAD; ++i) {
         thread_t *th = malloc(sizeof(thread_t));
-        if (pthread_create(&th->thid, NULL, threadW, NULL) != 0) {
+        if (pthread_create(&th->thid, NULL, threadF, NULL) != 0) {
             fprintf(stderr, "pthread_create FALLITA\n");
             exit(errno);
         }
@@ -107,7 +119,6 @@ int main(int argc, char *argv[]) {
     while (1) {
         //printf("okayyyyy\n");
         printf("Waiting for connetions...\n");
-
         tmpset = set;// necessario perche' select modifica il master set
         if (select(fd_max + 1, &tmpset, NULL, NULL, NULL) == -1) {
             perror("select");
@@ -121,33 +132,39 @@ int main(int argc, char *argv[]) {
                 int fd_client;
                 if (fd == fd_server) {
                     fd_client = accept(fd_server, NULL, 0);
-                    printf("Connected !\n");
+                    printf("Connected ! %d\n", fd);
                     FD_SET(fd_client, &set);// aggiunggo connection a master set
                     if (fd_client > fd_max) fd_max = fd_client;
                 } else if (S_ISFIFO(fd_stat.st_mode)) {
                     //int leggi = 1;
-                    int fd_client_read;
-                    readn(fd, &fd_client_read, sizeof(int));
-                    printf(" fd_client ritornato nella select letto : %d\n", fd_client_read);
+                    //unsigned long size_fd_read;
+                    //readn(fd, &size_fd_read, sizeof(unsigned long));
+                    //char * fd_buf = calloc(size_fd_read, sizeof(char*));
+                    int fd_buf;
+                    read(fd, &fd_buf, sizeof(int));
+                    //while ((read(fd, &fd_buf, sizeof(int)))>0){
+                    printf("            fd_client ritornato nella select letto : %d\n", fd_buf);
+                    //int fd_c = (int) strtol(fd_buf, NULL, 10);
                     // qui dovrei credo fare un while dove dovrei iterare il fdlst, per poi
                     // reinserire i client che stanno nella lista
-                    FD_SET(fd_client_read, &set);
-                    if (fd_client_read > fd_max) fd_max = fd_client_read;
-                }//continue; MANCA controllo pipe, il quale lo faccio con una stat
+                    FD_SET(fd_buf, &set);
+                    if (fd_buf > fd_max) fd_max = fd_buf;
+                }
                 else { // se richiesta disponibile
-                    printf("else\n");
                     FD_CLR(fd, &set);// lo tolgo dall'insieme dei descrittori
                     if (fd == fd_max) fd_max = updatemax(set, fd_max); // aggiorno il max
-
                     /*-------------- Request received --------------*/
                     // Parte di lettura del messaggio
                     unsigned char * sms;
-                    printf("fd :%d\n", fd);
                     recievedMsg_ServerToClient(&sms, fd);
+#if test == 1
+                    printf("fd :%d\n", fd);
+
+#endif
                     printf("contenuto del sms : ---- %s ----\n", sms);
-                    sms_arg  * smsArg;
-                    CHECK_EXIT("malloc smsArg", smsArg, malloc(sizeof(sms_arg)), NULL)
-                    memset(smsArg, 0, sizeof(sms_arg));
+                    struct sms_request  * smsArg;
+                    CHECK_EXIT("malloc smsArg", smsArg, malloc(sizeof(struct sms_request)), NULL)
+                    memset(smsArg, 0, sizeof(struct sms_request));
                     char * tmp;
                     char * token = strtok_r((char *) sms, ",", &tmp); // api_id +resto
                     smsArg->api_id = strtol(token, NULL, 10);
@@ -165,19 +182,17 @@ int main(int argc, char *argv[]) {
                     } else {
                         smsArg->sms_content = NULL;
                     }
-                    // Qui metto la richiesta nella coda che poi verra' data al thread
-                    threadF(smsArg, &storage);
-
-                    // Manca la parte della coda e dei thread worker
-
-                    // devo rimettere il client a disposizione nel set della select, attraverso il file descr pipe
-
-
+                    smsArg->storage = &storage;
+                    smsArg->son = NULL;
+                    smsArg->father = NULL;
+                    push(&smsArg);
                 }
-                //printf("okay\n");
             }
         }
-
+#if test == 1
+        printf("client prova a connettersi\n");
+#endif
+        printQueue(queue);
     }
     for (int i = 0; i < cfg->N_THREAD; ++i) {
         pthread_join(lst_thread[i]->thid, NULL);
