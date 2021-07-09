@@ -14,6 +14,7 @@ struct sms_request{
     unsigned char * sms_content;
     int fd_client_id;
     int pipe_fd;
+    char *sockname;
     info_storage_t ** storage;
     struct sms_request *son;
     struct sms_request *father;
@@ -28,6 +29,17 @@ typedef struct {
     int thread_occupato;
 } queue_t;
 
+typedef struct {
+    int pipe;
+    sigset_t  * set_sig;
+}signalHandler_t;
+
+typedef struct {
+    long max_nfile;
+    long max_mem_used;
+    int cnt_file_removed;
+}statistics_t;
+
 void createQueue(queue_t ** pQueue);
 
 void push( struct sms_request** pSmsRequest);
@@ -35,6 +47,8 @@ void push( struct sms_request** pSmsRequest);
 struct sms_request * pop();
 
 void printQueue();
+
+void * threadSignal(void * arg);
 
 void* threadF(void * queue);
 

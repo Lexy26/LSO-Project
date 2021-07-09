@@ -35,16 +35,16 @@ struct node *createFileNode(char * pathname, int fd); // long key
 info_storage_t *createStorage(long ram, long nfile);
 
 
-int removeFile(struct node **file_remove, char ** pathname_removed, info_storage_t **storage, struct node ** current_file);
+int removeFile(struct node **file_remove, char ** pathname_removed, info_storage_t **storage, struct node ** current_file, int *nfile_removed);
 
 
 int searchFileNode(char * pathname, info_storage_t ** storage, struct node ** file_found);
 
 
-int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path);
+int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int *nfile_removed);
 
 
-int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content);
+int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content, int * nfile_removed);
 
 
 int removeSpecificFile(char * pathname, info_storage_t ** storage, char ** pathname_removed);

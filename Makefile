@@ -1,61 +1,61 @@
 # ------------ Versione base del Makefile ---------------
 
 # compilatore da usare
-CC		=  gcc
+CC = gcc
 # aggiungo alcuni flags di compilazione
-CCFLAGS	        += -std=c99 -Wall -g -Werror
-# gli include sono nella dir. corrente
-# INCLUDES	= -I.
+CCFLAGS += -std=c99 -Wall -g -Werror
 
-OBJ_CLIENT = util.o API.o util_client.o
+INC = ./includes
+# dipendenze client e server
+OBJ_CLIENT = $(INC)/util.o $(INC)/API.o $(INC)/util_client.o $(INC)/conn.o
+OBJ_SERVER = $(INC)/file_storage.o $(INC)/util_server.o $(INC)/util.o $(INC)/conn.o $(INC)/configuration.o
 
-OBJ_SERVER = file_storage.o util_server.o util.o conn.o configuration.o
-
+#  ============= Create object of header file ============  #
 server: server.c $(OBJ_SERVER)
-	$(CC) $(CCFLAGS) server.c $(OBJ_SERVER) -o server -lpthread
+	$(CC) $(CCFLAGS) server.c -I $(INC) $(OBJ_SERVER) -o server -lpthread
 
 client: client.c $(OBJ_CLIENT)
-	$(CC) $(CCFLAGS) client.c $(OBJ_CLIENT) -o client
-
-# ----------Per Debuggare------------
-vos:
-	valgrind --leak-check=full --track-origins=yes --show-leak-kinds=all ./server -F config.txt
-
-#-w /home/nessy/Desktop/Savetmp,n=5
-#-W client.c,server.c
-#-R n=0
-#-d /home/nessy/CLionProjects/Progetto-LSO/YOLO -r client.c,server.c
-
-voc:
-	valgrind --leak-check=full ./client -W client.c,server.c -d /home/nessy/CLionProjects/Progetto-LSO/YOLO -R #  --track-origins=yes --show-leak-kinds=all
-
-outs:
-	./server -F config.txt
-
-outc:
-	./client -w /home/nessy/Desktop/Savetmp,n=0
-# -----------------------------------
-
-util_client.o: util_client.c util_client.h API.o
-	$(CC) $(CCFLAGS) -c util_client.c
+	$(CC) $(CCFLAGS) client.c -I $(INC) $(OBJ_CLIENT) -o client
 
 
-file_storage.o: file_storage.c file_storage.h util.o
-	$(CC) $(CCFLAGS) -c file_storage.c
+$(INC)/util_client.o: $(INC)/util_client.c $(INC)/util_client.h $(INC)/API.o
+	$(CC) $(CCFLAGS) -c $(INC)/util_client.c -I $(INC) -o $@
 
-util_server.o: util_server.c util_server.h util.o conn.o file_storage.o
-	$(CC) $(CCFLAGS) -c util_server.c
+$(INC)/file_storage.o: $(INC)/file_storage.c $(INC)/file_storage.h $(INC)/util.o
+	$(CC) $(CCFLAGS) -c $(INC)/file_storage.c -I $(INC) -o $@
 
-util.o: util.c util.h conn.o
-	$(CC) $(CCFLAGS) -c util.c
+$(INC)/util_server.o: $(INC)/util_server.c $(INC)/util_server.h $(INC)/util.o $(INC)/conn.o $(INC)/file_storage.o
+	$(CC) $(CCFLAGS) -c $(INC)/util_server.c -I $(INC) -o $@
 
-conn.o: conn.c conn.h
-	$(CC) $(CCFLAGS) -c conn.c
+$(INC)/util.o: $(INC)/util.c $(INC)/util.h $(INC)/conn.o
+	$(CC) $(CCFLAGS) -c $(INC)/util.c -I $(INC) -o $@
 
-API.o: API.c API.h util.o
-	$(CC) $(CCFLAGS) -c API.c
+$(INC)/conn.o: $(INC)/conn.c $(INC)/conn.h
+	$(CC) $(CCFLAGS) -c $(INC)/conn.c -I $(INC) -o $@
 
-configuration.o: configuration.c configuration.h
-	$(CC) $(CCFLAGS) -c configuration.c
+$(INC)/API.o: $(INC)/API.c $(INC)/API.h $(INC)/util.o
+	$(CC) $(CCFLAGS) -c $(INC)/API.c -I $(INC) -o $@
 
-clean:
+$(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h
+	$(CC) $(CCFLAGS) -c $(INC)/configuration.c -I $(INC) -o $@
+
+cleanall:
+	-rm -f includes/*.o server client
+
+# ______________ TEST 1 ______________
+test1: test1server test1client
+test1server:
+	make server
+	valgrind ./server -F config1.txt & # --leak-check=full
+test1client:
+	make client
+	#chmod +x test1.sh
+	bash ./test1.sh # chmod +x test1.sh || bash
+
+# ______________ TEST 2 ______________
+test2: test2server test2client
+test2server:
+	make server
+test2client:
+	make client
+	bash ./test2.sh

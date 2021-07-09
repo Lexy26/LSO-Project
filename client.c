@@ -8,11 +8,12 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <libgen.h>
 
 
-#include "util.h"
-#include "util_client.h"
-#include "API.h"
+#include "./includes/util.h"
+#include "./includes/util_client.h"
+#include "./includes/API.h"
 
 #define test 1
 
@@ -34,7 +35,7 @@ int main(int argc, char *argv[]) {
     extern int optopt;
     // ATTENZIONE ogni char puo avere piu richieste, generalizzare la ricezione delle informazioni per ogni opzione
 
-    while ((opt = getopt(argc, argv, "p c:u:h l:t:d:R::r:f:w:W:")) != -1) {
+    while ((opt = getopt(argc, argv, "p c:u:h l:t:d:R:r:f:w:W:")) != -1) {
         switch (opt) {
             case 'h':
                 nbRequest->char_h = 1;
@@ -55,17 +56,17 @@ int main(int argc, char *argv[]) {
                 createRequest(optarg, NULL, "r", &nbRequest, &index);
                 break;
             case 'R':
-                createRequest(argv[optind], NULL, "R", &nbRequest, &index);
+                createRequest(optarg, NULL, "R", &nbRequest, &index); // argv[optind]
                 break;
             case 'd': {
                 // imettere file letti nel storage
                 // se l'opzione successiva non c'e' allora errore EXIT_FAILURE
                 char *dirname = optarg;
-                if ((opt = getopt(argc, argv, "r:R::")) != -1) {
+                if ((opt = getopt(argc, argv, "r:R:")) != -1) {
                     if (opt == 'r') {
                         createRequest(optarg, dirname, "r", &nbRequest,&index);
                     } else if (opt == 'R') {
-                        createRequest(argv[optind], dirname, "R", &nbRequest,&index);
+                        createRequest(optarg, dirname, "R", &nbRequest,&index);
                     } else { // ERRORE
                         printf("Usage -d option: -d dirname -r file1[,file2]\n\t     or: -d dirname -R [n=0]\n");
                         return 0;
@@ -107,12 +108,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (nbRequest->char_f == NULL) { // usato per test base della connessione
-        nbRequest->char_f = SOCKNAME;
-        if (simple_opneConnection(SOCKNAME, 1, 10)== -1){
-            fprintf(stderr, "errore while open connection to server\n");
-            exit(EXIT_FAILURE);
-        }
-    } else if (nbRequest->char_f == 0) { // sockanem
+        fprintf(stderr, "Socket error\n");
+        return -1;
+    } else { // sockanem
         printf("char_f connected with param : %s\n", nbRequest->char_f);
         // connection with server
         char * abs_path_socket;
@@ -124,18 +122,25 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-    int cond = 1;
+    // INSIEME DI REQUEST
 #if test == 1
     printf("nb request : %d\n", nbRequest->tot_request);
 #endif
+//    int i=0;
+//    while (i<nbRequest->tot_request) {
+//        printf("--- command %d : %s\n", i, nbRequest->lst_char_abc[i]->param);
+//        ++i;
+//    }
+    // -----------------------------
+    int cond = 1;
     if (nbRequest->char_h) { // help
         PRINT_H
         cond = 0;
     }
-
     // while per iterare le richieste da inviare al server
     index = 0;
     while (cond && index < nbRequest->tot_request) {
+        //printf("               INDEX prima : %d---------------------\ncommand : %s\n", index, nbRequest->lst_char_abc[index]->param);
         char options[2];
         strncpy(options, nbRequest->lst_char_abc[index]->option, 2);
 
@@ -168,19 +173,22 @@ int main(int argc, char *argv[]) {
                         correct = -1;
                     }
                     printf("tokehn err : %s\n", token);
-                    nfile = strtol(tmp, NULL, 10);// setto la variabile che utilizzero' come max file possibili da scrivere
-                    if(nfile<0) nfile = 0;
-                } else nfile = 0;
+                    nfile = strtol(token, NULL, 10);// setto la variabile che utilizzero' come max file possibili da scrivere
+                    printf("nfile 0 : %ld\n", nfile);
+                    if(nfile<0) { nfile = 0; }
+                    printf("nfile 1 : %ld\n", nfile);
+                } else { nfile = 0; }
                 int totfile = 0;
                 char ** files_to_write = NULL;
                 if(nfile > 0) {
                     totfile = -1;
                 }
                 if(correct == 1) {
+                    printf("nfile 2 : %ld\n", nfile);
                     recDirectory(dirname, files_to_write, &nfile, index, &totfile, &nbRequest);
                 }
             }
-            free(nbRequest->lst_char_abc[index]);
+            //free(nbRequest->lst_char_abc[index]);
             ++index;
         }
         else if (strcmp(options, "W") == 0) { // -W file1[,file2]
@@ -196,6 +204,7 @@ int main(int argc, char *argv[]) {
                 if(find_absolute_path(token, &abs_path_token) == -1) {
                     printf("path of filename [%s] doesn't exist\n", token);
                 } else {
+//                    printf("okay\n");
                     if (openAppendClose(abs_path_token, &nbRequest, index) == -1) {
                         printf("Can't insert file : %s\n", token);
                     }
@@ -203,7 +212,7 @@ int main(int argc, char *argv[]) {
                 token = strtok_r(NULL, ",", &tmp);
                 timer(nbRequest->char_t);
             }
-            free(nbRequest->lst_char_abc[index]);
+            //free(nbRequest->lst_char_abc[index]);
             ++index;
         }
         else if (strcmp(options, "r") == 0) { // -r file1[,file2] [-d dirname]
@@ -217,43 +226,61 @@ int main(int argc, char *argv[]) {
             char *abs_path_token;
             while (token != NULL) {// per iterare tutti i file da leggere nel file storage
                 abs_path_token = NULL;
+                printf("PATH FIND PRIMA\n");
                 // estrapolo il path assoluto del file
                 if (find_absolute_path((char*)token, &abs_path_token) == -1) {
                     printf("path of filename [%s] doesn't exist\n", token);
                 } else {
+                    printf("CONTROL OPEN\n");
                     if (openFile(abs_path_token, O_OPEN) == 0) {
+                        printf("CONTROL READ\n");
                         if (readFile(abs_path_token, &buffer, &size_buffer) == -1) {
                             printf("errore nella lettura del file : %s\n", token);
                         } else {
                             if (nbRequest->char_p) { // se -p attivo stampo i file letti da file storage richiesti
-                                printf("-------------------------------");
-                                printf("CONTENUTO FILE :\n %s\n%s\n\n", abs_path_token, (char*) buffer);
-                                printf("-------------------------------");
+//                                printf("-------------------------------");
+//                                printf("CONTENUTO FILE :\n %s\n%s\n\n", abs_path_token, (char*) buffer);
+//                                printf("-------------------------------");
                             }
                             struct stat st;
                             char * dirname = nbRequest->lst_char_abc[index]->dirname;
                             if (dirname != NULL) {
+                                printf("DIRECTORY HERE\n");
                                 if (stat(dirname, &st) == -1 || !S_ISDIR(st.st_mode)) {
                                     fprintf(stderr, "Directory doesn't exist. Can't save file read.\n");
                                 } else {
-                                    char * filename = malloc((strlen(nbRequest->lst_char_abc[index]->dirname) +2+ strlen(token))* sizeof(unsigned char));
-                                    memset(filename, 0,(strlen(nbRequest->lst_char_abc[index]->dirname) +2+ strlen(token)));
-                                    strncpy(filename, nbRequest->lst_char_abc[index]->dirname, strlen(nbRequest->lst_char_abc[index]->dirname));
+                                    printf("okayokay\n");
+                                    char * dirname_abs_path;
+                                    if (find_absolute_path((char*)dirname, &dirname_abs_path) == -1) {
+                                        printf("path of filename [%s] doesn't exist\n", token);
+                                    }
+                                    char * base_path = basename(token);
+                                    char * filename = malloc((strlen(dirname_abs_path) +2+ strlen(base_path))* sizeof(unsigned char));
+                                    memset(filename, 0,(strlen(dirname_abs_path) +2+ strlen(base_path)));
+                                    strncpy(filename, dirname_abs_path, strlen(dirname_abs_path));
                                     strncat(filename, "/", strlen("/")+1);
-                                    strncat(filename, token, strlen(token)+1);
+                                    strncat(filename, base_path, strlen(base_path)+1);
+                                    printf("okok path : %s\n", filename);
                                     // creo un file per scriverci dentro alla directory giusta
                                     FILE *f = fopen(filename, "wb");
+                                    if(f == NULL) {
+                                        perror("fwrite");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    printf("bnufeer size : %zu\n",size_buffer);
                                     fwrite(buffer, size_buffer, 1, f);
                                     fclose(f);
+                                    printf("okok\n");
                                 }
                             }
                         }
                         timer(nbRequest->char_t);
+                        printf("CLOSE PRIMA\n");
                         if (closeFile(abs_path_token) == -1) {
                             printf("Problem with closing file\n");
                             closeConnection(nbRequest->char_f);
                         } else {
-                            printf( "Read file \"%s\" done\n", token);
+                            printf( "Read file [ %s ] done\n", token);
                         }
                     } else {
                         printf("File doesn't exist\n");
@@ -262,7 +289,7 @@ int main(int argc, char *argv[]) {
                 token = strtok_r(NULL, ",", &tmp);
                 timer(nbRequest->char_t);
             }
-            free(nbRequest->lst_char_abc[index]);
+            //free(nbRequest->lst_char_abc[index]);
             ++index;
         } else if (strcmp(options, "R") == 0) { // -R [n=0] [-d dirname]
 #if test == 1
@@ -270,22 +297,29 @@ int main(int argc, char *argv[]) {
 #endif
             int nb_files;
             if (nbRequest->lst_char_abc[index]->param != NULL) { // se n e' stato adto, allora tokenizzo
-                unsigned long len = strlen(nbRequest->lst_char_abc[index]->param)-1;
-                if (nbRequest->lst_char_abc[index]->param[len-1]=='-') {
-                    nb_files = 0;
-                } else {
-                    nb_files = nbRequest->lst_char_abc[index]->param[len] - '0';
-                }
+                //unsigned long len = strlen(nbRequest->lst_char_abc[index]->param)-1;
+                char *tmp;
+                char * token = strtok_r(nbRequest->lst_char_abc[index]->param, "=",&tmp);
+                token = strtok_r(NULL, "=", &tmp);
+                nb_files =(int) strtol(token, NULL, 10);
+                if(nb_files < 0) nb_files = 0;
+                else nb_files = nb_files;
+//                if (nbRequest->lst_char_abc[index]->param[len-1]=='-') {
+//                    nb_files = 0;
+//                } else {
+//                    nb_files = nbRequest->lst_char_abc[index]->param[len] - '0';
+//                }
             } else {
                 nb_files = 0;
             }
             if(readNFiles(nb_files, nbRequest->lst_char_abc[index]->dirname) == -1) {
                 printf("Error in read %d file\n", nb_files);
             }
-            free(nbRequest->lst_char_abc[index]);
+            //free(nbRequest->lst_char_abc[index]);
             timer(nbRequest->char_t);// pausa fra una richiesta e l'altra
             ++index;
         }
+        //printf("                 INDEX dopo : %d---------------------\ncommand : %s\n", index, nbRequest->lst_char_abc[index]->param);
     }
 
     // CONCLUSIONE

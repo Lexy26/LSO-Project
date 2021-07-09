@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 
 #include <getopt.h>
 
@@ -12,8 +13,10 @@
 
 #define BUF_SIZE 256
 
+char *realpath(const char *path, char *resolved_path);
+
 void configuration(int argc,char *argv[],config_t **cfg){
-    if (argc != 3) {// ~$ ./server -F config.txt (null)
+    if (argc != 3) {// ~$ ./server -F config1.txt (null)
         printf("Use: ./server -F <fileConfig.txt>\n");
         exit(EXIT_FAILURE);
     }
@@ -35,7 +38,7 @@ void configuration(int argc,char *argv[],config_t **cfg){
         }
     }
     // qui ricopio il contenuto di config file nelle varie variabili della struct config_t
-    char buffer[BUF_SIZE]; // qui e' dove mettero' le righe del file config.txt
+    char buffer[BUF_SIZE]; // qui e' dove mettero' le righe del file config1.txt
     char *tmp;// mi serve per far strtok_r rientrante
     char *token;
     // per leggere riga per riga quello che sta dentro al file
@@ -89,7 +92,19 @@ void configuration(int argc,char *argv[],config_t **cfg){
                 printf("server starting with MEM_SIZE=128000 default variable");
                 (*cfg)->MEM_SIZE = 128000;
             }
-        } else {// se per caso il formato del file config non e' corretto allora errore
+        } else if (strncmp(token, "SOCKNAME", strlen("SOCKNAME")) == 0) {
+            token = strtok_r(NULL, " ", &tmp);
+            if(token == NULL || strncmp(&token[0], "#", 2)==0){
+                perror("SOCKNAME convertion error");
+                printf("server starting with SOCKNAME=./cs_sock default variable");
+                (*cfg)->SOCKNAME = "./cs_sock";
+            }
+            (*cfg)->SOCKNAME = malloc(strlen(token)+1);
+            memset((*cfg)->SOCKNAME, '\0', strlen(token)+1);
+            strncpy((*cfg)->SOCKNAME, token, strlen(token)+1);
+            printf(" SOCKET : %s\n", (*cfg)->SOCKNAME);
+        }
+        else {// se per caso il formato del file config non e' corretto allora errore
             printf("format config file error\n");
             fprintf(stderr, "Value of errno: %d\n", errno);
         }

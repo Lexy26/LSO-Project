@@ -1,3 +1,4 @@
-N_THREAD 10 # Number of thread in server
-N_FILE 100 # Number max of possible file in storage
-MEM_SIZE 512 # Dimension of file storage server in Mbytes
+N_THREAD 1 # Number of thread in server
+N_FILE 10000 # Number max of possible file in storage
+MEM_SIZE 128000000 # Dimension of file storage server in 128 Mbytes
+SOCKNAME ./cs_sock # Nome del socket

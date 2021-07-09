@@ -26,8 +26,8 @@ void timer(int time) {
 
 void initLstRequest(nb_request ** lst_request) {
     CHECK_EXIT("calloc lst", *lst_request, calloc(1, sizeof(nb_request)),NULL)// spazio suff. per freeare char_abc + msg
-    CHECK_EXIT("calloc lst", (*lst_request)->lst_char_abc, calloc(T_REQUEST, sizeof(nb_request)),NULL)// spazio suff. per freeare char_abc + msg
-    memset((*lst_request)->lst_char_abc, 0, T_REQUEST* sizeof(nb_request));
+    CHECK_EXIT("calloc lst", (*lst_request)->lst_char_abc, calloc(T_REQUEST, sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
+    memset((*lst_request)->lst_char_abc, 0, T_REQUEST* sizeof(command_t));
     (*lst_request)->char_f = NULL;
     (*lst_request)->char_h = 0;
     (*lst_request)->char_p = 0;
@@ -37,12 +37,14 @@ void initLstRequest(nb_request ** lst_request) {
 void createRequest(char *ptarg, char *dirname, char option[2], nb_request ** pRequest, int *index) {
     command_t * char_abc;
     CHECK_EXIT("calloc", char_abc, calloc(1, sizeof(command_t)), NULL)
-            (char_abc)->param = ptarg;
+    (char_abc)->param = ptarg;
     (char_abc)->dirname = dirname;
     strncpy((char_abc)->option, option, 2);
-    (*pRequest)->lst_char_abc[*index] = char_abc;
+    //(*pRequest)->lst_char_abc =
+    int i = *index;
+    (*pRequest)->lst_char_abc[i] = &(*char_abc);
     ++(*pRequest)->tot_request;
-    ++*index;
+    *index += 1;
 }
 
 // *** lst : xke' 1) * equal to command_t in array; 2) * per indicare che e' un array, 3) * perche' non voglio che le modifiche rimangano in locale
@@ -180,7 +182,7 @@ int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, 
                         openAppendClose(dir_abspath, nbRequest, index);
                         --*nfiles;
                     } else {
-                        printf("file : %s\n", dir_abspath);
+//                        printf("file : %s\n", dir_abspath);
                         openAppendClose(dir_abspath, nbRequest, index);
                     }
                 }

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <signal.h>
 
 
 #include "util_server.h"
@@ -12,10 +13,15 @@
 #include "util.h"
 #include "conn.h"
 
-#define test 1
+#define test 0
+#define TEST_LOCK 0
 
 //extern pthread_mutex_t mutex;
 extern queue_t * queue;
+extern statistics_t *statistics;
+extern volatile int sigINT_sigQUIT;
+extern volatile int sigHUP;
+extern volatile int nclient;
 //extern info_storage_t storage;
 
 void createQueue(queue_t ** pQueue) {
@@ -79,34 +85,84 @@ void printQueue() {
     pthread_mutex_unlock(&queue->lock);
 }
 
+void * threadSignal(void * arg) {
+    signalHandler_t * signalHandler = arg;
+    sigset_t *set_signal = signalHandler->set_sig;
+    int pipe_s = signalHandler->pipe;
+
+    while (1) {
+        int sig;
+        int s = sigwait(set_signal, &sig);
+        if(s != 0) {
+            perror("sigwait");
+            exit(EXIT_FAILURE);
+        }
+        switch (sig) {
+            case SIGHUP:
+                printf("Signal handling : SIGHUP\n");
+                fflush(stdout);
+                sigHUP = 1;
+                close(pipe_s);
+                return (void *) 0;
+            case SIGQUIT:
+                printf("Signal handling : SIGQUIT\n");
+                fflush(stdout);
+                sigINT_sigQUIT = 1;
+                return (void*) 0;
+            case SIGINT:
+                printf("Signal handling : SIGINT\n");
+                fflush(stdout);
+                sigINT_sigQUIT = 1;
+                return (void*) 0;
+            default:
+                break;
+        }
+    }
+
+}
+
 // la funzione che i thread worker prendono quando vengono creati
 void* threadF(void* args) {
     while(1) {
         //struct sms_request * smsRequest;
         printf("=============== Ritorna Thread Passivo %lu ===============\n", pthread_self());
+
+//        printf("***********************************************\n");
+//        printf("********nclient : %d || sigHUP : %d *********\n", nclient, sigHUP);
+//        printf("***********************************************\n");
+
         pthread_mutex_lock(&queue->lock);
         while (queue->head == NULL) {
+            if (sigINT_sigQUIT == 1) {
+                fprintf(stderr,"-----------CHIUSURA THREAD INT QUIT---------\n");
+                return (void*) 0;
+            }
+            if(nclient == 0 && sigHUP == 1) {
+                fprintf(stderr,"----------------------------------------\n");
+                fprintf(stderr,"------------CHIUSURA THREAD HUP---------\n");
+                fprintf(stderr,"----------------------------------------\n");
+                pthread_mutex_unlock(&queue->lock);
+                return (void*) 0;
+            }
+            printf("waiting QUEUE\n");
             pthread_cond_wait(&queue->queue_cond, &queue->lock);
         }
+
         struct sms_request * request = pop();
-        printf("__________________________________________________________\n");
-        printf("threadF activated : %lu\nrequest: %s\n", pthread_self(), request->sms_info);
-        printf("__________________________________________________________\n");
+//        printf("__________________________________________________________\n");
+//        printf("threadF activated : %lu\nrequest: %s\n", pthread_self(), request->sms_info);
+//        printf("__________________________________________________________\n");
         pthread_mutex_unlock(&queue->lock);
         // ------------------ OKAY ------------------
         if (request->api_id == 1) { // api_id == 1 -> closeConnection
             char * tmp;
             char * token = strtok_r(request->sms_info, ",",&tmp); // api_id + resto
-#if test == 1
-            printf("client prova a connettersi\n");
             printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ api_id 1 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-#endif
-            // token = sockname || tmp = NULL
             // Parte di scrittura del messaggio
             msg_t *sms_write;
             CHECK_RETURN("malloc sms_write", sms_write, malloc(sizeof(msg_t)), NULL)
             memset(sms_write, 0, sizeof(msg_t));
-            if (strncmp(token, SOCKNAME, strlen(SOCKNAME)) == 0) { // okay
+            if (strncmp(token, request->sockname, strlen(request->sockname)) == 0) { // okay
                 sms_write->len = strlen("0")+1;
                 CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                 sms_write->str = (unsigned char *) "0";
@@ -121,23 +177,24 @@ void* threadF(void* args) {
             CHECK_EXIT("write ClConn size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
             CHECK_EXIT("write ClConn sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 #if test == 1
-            printf("Chiusura socket client : %d\n\n", request->fd_client_id);
-            printf("client prova a connettersi\n");
-            printf("------------------ STORAGE 1 ------------------\n");
-            printf("ram dispo    : %ld\n", (*request->storage)->ram_dispo);
-            printf("n file dispo : %ld\n", (*request->storage)->nfile_dispo);
+            fprintf(stderr,"Chiusura socket client : %d\n\n", request->fd_client_id);
+            fprintf(stderr,"client prova a connettersi\n");
+            fprintf(stderr,"------------------ STORAGE 1 ------------------\n");
+            fprintf(stderr,"ram dispo    : %ld\n", (*request->storage)->ram_dispo);
+            fprintf(stderr,"n file dispo : %ld\n", (*request->storage)->nfile_dispo);
             printStorage(request->storage);
-            printf("-----------------------------------------------\n");
-            printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-            printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+            fprintf(stderr,"-----------------------------------------------\n");
+            fprintf(stderr,"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+            fprintf(stderr,"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 #endif
+            nclient -= 1;
             free(sms_write);
             close(request->fd_client_id);
             // ------------------ OKAY ------------------
         } else if (request->api_id == 2){ // api_id == 2 -> openFile -> api_id + pathname +  flag
 #if test == 1
-            printf("client prova a connettersi\n");
-            printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ api_id 2 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+            fprintf(stderr,"client prova a connettersi\n");
+            fprintf(stderr,"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ api_id 2 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
             //printf("path : %s || flag : %s\n", token, tmp);
 #endif
             char * tmp;
@@ -154,10 +211,11 @@ void* threadF(void* args) {
                 sms_write->str = (unsigned char *) "-1";
             } else {
                 if (create == -1) {
+
                     char * buf_rm_path = malloc(sizeof(char));
                     memset(buf_rm_path, 0, sizeof(char));
                     file = createFileNode(pathfile, request->fd_client_id);
-                    if (insertCreateFile(&file, &(*request->storage), &buf_rm_path)) {
+                    if (insertCreateFile(&file, &(*request->storage), &buf_rm_path, &statistics->cnt_file_removed)) {
                         sms_write->len = strlen("-1"); // errore
                         CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                         sms_write->str = (unsigned char *) "-1";
@@ -231,9 +289,18 @@ void* threadF(void* args) {
             char * tmp;
             char * token = strtok_r(request->sms_info, ",",&tmp);
             struct node* file_read;
+            msg_t *sms_write = malloc(sizeof(msg_t));
+            memset(sms_write, 0, sizeof(msg_t));
             if (searchFileNode(token, &(*request->storage), &file_read) == -1) {
-                unsigned char nnt[5] = "null";
-                sendMsg_ClientToServer_Append(request->fd_client_id,"-1,",file_read->pathname, "5", nnt);
+                sms_write->len = strlen("-1")+1; // errore
+                CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                sms_write->str = (unsigned char *) "-1";
+                int notused;
+                CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+                CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+
+//                unsigned char nnt[5] = "null";
+//                sendMsg_ClientToServer_Append(request->fd_client_id,"-1,",file_read->pathname, "5", nnt);
             } else {
                 int cnt = 0; // aspetto che il file sia aperto dal client interessato
                 while (file_read->fdClient_id != request->fd_client_id && cnt < TIMER) {
@@ -245,8 +312,15 @@ void* threadF(void* args) {
 #endif
                 pthread_mutex_lock(&(*request->storage)->lock);
                 if(file_read->fdClient_id != request->fd_client_id) {
-                    unsigned char nnt[5] = "null";
-                    sendMsg_ClientToServer_Append(request->fd_client_id, "-1,", file_read->pathname, "5", nnt);
+                    sms_write->len = strlen("-1")+1; // errore
+                    CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                    sms_write->str = (unsigned char *) "-1";
+                    int notused;
+                    CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+                    CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+
+//                    unsigned char nnt[5] = "null";
+//                    sendMsg_ClientToServer_Append(request->fd_client_id, "-1,", file_read->pathname, "5", nnt);
                 } else {
                     //while(file_read->fdClient_id != request->fd_client_id){}
                     char size_char[BUFSIZE];
@@ -269,9 +343,9 @@ void* threadF(void* args) {
             printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ api_id 4 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
             //printf("N file da leggere : %s\n", token);
 #endif
-            char * tmp;
-            char * token = strtok_r(request->sms_info, ",",&tmp); // token = N
-            long n_read = strtol(token, NULL, 10);
+//            char * tmp;
+//            char * token = strtok_r(request->sms_info, ",",&tmp); // token = N
+            long n_read = strtol(request->sms_info, NULL, 10);
             if(n_read == 0) {
                 n_read = (*request->storage)->nfile_dispo;
             }
@@ -279,8 +353,12 @@ void* threadF(void* args) {
 #if test == 1
             printf("client prova a connettersi\n");
             printf("n FINALE : %ld\n", n_read);
+            printf("current path : %s\n", current->pathname);
+            printf("risultato while primo : %d | secondo : %d\n", n_read>0, current!=NULL);
 #endif
+            long check = n_read;
             while(n_read>0 && current != NULL){
+                printf("entra path : %s\n", current->pathname);
 #if TEST_LOCK == 1
                 printf("readNFile LOCK\n");
 #endif
@@ -300,13 +378,28 @@ void* threadF(void* args) {
 #endif
                 pthread_mutex_unlock(&(*request->storage)->lock);
             }
-            if (n_read > 0) {
-                unsigned char notused[5] = "null";
-                sendMsg_ClientToServer_Append(request->fd_client_id,"-1,","00", "5", notused);//avverto che e' tutto finito
+            printf("FINISH while read\n");
+            msg_t *sms_write = malloc(sizeof(msg_t));
+            memset(sms_write, 0, sizeof(msg_t));
+            if (n_read == check) {
+                printf("ERRORE\n");
+                sms_write->len = strlen("-1")+1; // errore
+                CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                sms_write->str = (unsigned char *) "-1";
+//                unsigned char notused[5] = "null";
+//                sendMsg_ClientToServer_Append(request->fd_client_id,"-1,","00", "5", notused);//avverto che e' tutto finito
             } else {
-                unsigned char notused[5] = "null";
-                sendMsg_ClientToServer_Append(request->fd_client_id,"0,","00", "5", notused);//avverto che e' tutto finito
+                printf("ciclo finito\n");
+                sms_write->len = strlen("0")+1; // errore
+                CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                sms_write->str = (unsigned char *) "0";
+//                unsigned char notused[5] = "null";
+//                sendMsg_ClientToServer_Append(request->fd_client_id,"0,","00", "5", notused);//avverto che e' tutto finito
             }
+            int notused;
+            CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+
             writen(request->pipe_fd, &request->fd_client_id, sizeof(int)); // reinserisco il client
 
             // ------------------ OKAY ------------------
@@ -350,7 +443,7 @@ void* threadF(void* args) {
 #endif
                     pthread_mutex_unlock(&(*request->storage)->lock);
                     // -------------------------NEW INSERT FILE------------------------------
-                    if (UpdateFile(&file_node, &(*request->storage), &buf_rm_path, request->fd_client_id, request->size_buf, request->sms_content) == -1) {
+                    if (UpdateFile(&file_node, &(*request->storage), &buf_rm_path, request->fd_client_id, request->size_buf, request->sms_content, &statistics->cnt_file_removed) == -1) {
                         sms_write->len = strlen("-1"); // errore
                         CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                         sms_write->str = (unsigned char *) "-1";
@@ -374,6 +467,17 @@ void* threadF(void* args) {
                     //----------------------------------------------------------------------
                 }
             }
+            // update max mem usata
+            long mem_usata = (*request->storage)->ram_tot - (*request->storage)->ram_dispo;
+//            fprintf(stderr,"------------------------------------\n");
+//            fprintf(stderr,"mem tot : %ld bytes\n", (*request->storage)->ram_tot);
+//            fprintf(stderr,"mem dispo : %ld\n", (*request->storage)->ram_dispo);
+//            fprintf(stderr,"mem usata : %ld\n", mem_usata);
+//            fprintf(stderr,"------------------------------------\n");
+            if (mem_usata > statistics->max_mem_used) statistics->max_mem_used = mem_usata;
+            // update max nfile inseriti
+            long tot_nfile = (*request->storage)->nfile_tot - (*request->storage)->nfile_dispo;
+            if (tot_nfile > statistics->max_nfile) statistics->max_nfile = tot_nfile;
             int notused;
             CHECK_EXIT("write ClConn size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
             CHECK_EXIT("write ClConn sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
@@ -442,6 +546,5 @@ void* threadF(void* args) {
             writen(request->pipe_fd, &request->fd_client_id, sizeof(int)); // reinserisco il client
         }
     }
-
-    return (void *) 0;
+//    return (void *) 0;
 }
