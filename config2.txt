@@ -1,4 +1,5 @@
 N_THREAD 4 # Number of thread in server
 N_FILE 10 # Number max of possible file in storage
 MEM_SIZE 1000000 # Dimension of file storage server in 128 Mbytes
-SOCKNAME ./cs_sock # Nome del socket
+SOCKNAME ./cs_sock2 # Nome del socket
+LOGFILE logfile2 # File di log con tutte le operazioni

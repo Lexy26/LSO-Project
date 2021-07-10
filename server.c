@@ -23,21 +23,13 @@
 #include "./includes/file_storage.h"
 #include "./includes/util_server.h"
 
-
-#define BUFSIZE 256
 #define test 0
 
-//pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 queue_t *queue;
 volatile int sigINT_sigQUIT = 0;
 volatile int sigHUP = 0;
 volatile int nclient = 0;
 statistics_t *statistics;
-
-//typedef struct {
-//    pthread_t thid;
-//    int var_libero; // 1 -> true; 0 -> false;
-//} thread_t;
 
 int updatemax(fd_set set, int fdmax) {
     for (int i = (fdmax - 1); i >= 0; --i)
@@ -46,246 +38,192 @@ int updatemax(fd_set set, int fdmax) {
     //return -1;
 }
 
-void *threadW() {
-    //printf("collegato\n");
-    return (void *) 0;
-}
-
 
 int main(int argc, char *argv[]) {
-
-    config_t *cfg = malloc(sizeof(config_t));
+    // create cfg to save configuration info for server init
+    config_t *cfg;
+    CHECK_EXIT_VAR("malloc cfg", cfg,malloc(sizeof(config_t)), NULL)
     configuration(argc, argv, &cfg);
 
+    // Togliere quando faccio rm del socket nel makefile
     if(unlink(cfg->SOCKNAME)) {
         printf("non c'e' il socket\n");
     }
+    // Create logfile to save internal operations of server
+    FILE * logfile;
+    CHECK_EXIT_VAR("fopen logfile", logfile,fopen(cfg->LOGFILE, "w"), NULL)
+    fprintf(logfile, "------------------------------------------------\n");
+    fprintf(logfile, "-          Internal Server Operations          -\n");
+    fprintf(logfile, "------------------------------------------------\n\n");
 
-    // create storage
+    // create STORAGE
     info_storage_t *storage;
-    CHECK_EXIT("calloc storage", storage, calloc(1, sizeof(info_storage_t)), NULL)
+    CHECK_EXIT_VAR("calloc storage", storage, calloc(1, sizeof(info_storage_t)), NULL)
     storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
-    // create Queue Request
-
-    CHECK_EXIT("calloc storage", queue, calloc(1, sizeof(queue_t)), NULL)
+    // create QUEUE Request
+    CHECK_EXIT_VAR("calloc queue", queue, calloc(1, sizeof(queue_t)), NULL)
     createQueue(&queue);
 
-    pthread_cond_init(&queue->queue_cond, NULL);
-    pthread_mutex_init(&queue->lock, NULL);
-
-    // init signal SIGINT SIGQUIT SIGHUP
+    // init SIGNAL
     sigset_t set_signal;
     sigemptyset(&set_signal);
-    //il server termina il prima possibile, ossia non accetta più nuove richieste da parte dei
-    //client connessi chiudendo tutte le connessioni attive (dovrà comunque generare il sunto
-    // delle statistiche, descritto nel seguito)
     sigaddset(&set_signal, SIGINT);
     sigaddset(&set_signal, SIGQUIT);
     sigaddset(&set_signal, SIGHUP);
-    if (pthread_sigmask(SIG_BLOCK, &set_signal, NULL) != 0) {
-        perror("pthread sigmask");
-        return -1;
-    }
-    // pipe for soft close
+    CHECK_NEQ_EXIT("pthread_sigmask", pthread_sigmask(SIG_BLOCK, &set_signal, NULL), 0)
+    // pipe for signal soft close
     int pipe_sig[2];
-    if (pipe(pipe_sig) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
+    CHECK_NEQ_EXIT("pipe signal", pipe(pipe_sig), 0)
+    // Create Signal Thread Worker
     signalHandler_t * signalHandler = malloc(sizeof(signalHandler_t));
     memset(signalHandler, 0, sizeof(signalHandler_t));
     signalHandler->set_sig = &set_signal;
     signalHandler->pipe = pipe_sig[1];
-
-    // Create Thread Worker Signal
     pthread_t signal_thread;
-    if(pthread_create(&signal_thread, NULL, threadSignal, signalHandler) != 0) {
-        perror("Creation Signal thread error");
-        return -1;
-    }
+    CHECK_NEQ_EXIT("pthread_create signal", pthread_create(&signal_thread, NULL, threadSignal, signalHandler), 0)
 
-
-    /*------ THREAD WORKER INITIALIZER ------*/
-    // (_______fare in seguito un controllo di thread W se occupato o no______)
-
-    pthread_t lst_thread[cfg->N_THREAD]; // lista di thread worker
+    //  THREAD WORKER INITIALIZER
+    CHECK_NEQ_EXIT("pthread_cond_init", pthread_cond_init(&queue->queue_cond, NULL), 0)
+    CHECK_NEQ_EXIT("pthread_mutex_init", pthread_mutex_init(&queue->lock, NULL), 0)
+    pthread_t lst_thread[cfg->N_THREAD]; // thread worker list
     for (int i = 0; i < cfg->N_THREAD; ++i) {
         pthread_t th;
-        if (pthread_create(&th, NULL, threadF, NULL) != 0) {
-            fprintf(stderr, "pthread_create FALLITA\n");
-            exit(errno);
-        }
+        CHECK_NEQ_EXIT("pthread_create threadF",pthread_create(&th, NULL, threadF, NULL), 0)
         lst_thread[i] = th;
     }
-
+    // Create socket for connection
     int fd_server;
-    if ((fd_server = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {  // creo il socket
-        perror("socket");
-        exit(errno);
-    }
-    struct sockaddr_un server_address;    // setto l'indirizzo
+    CHECK_EXIT_VAR("socket", fd_server, socket(AF_UNIX, SOCK_STREAM, 0), -1)
+    struct sockaddr_un server_address; // set the address
     memset(&server_address, 0, sizeof(server_address));
     server_address.sun_family = AF_UNIX;
-    printf("SOCKET Server : %s\n", cfg->SOCKNAME);
     strncpy(server_address.sun_path, cfg->SOCKNAME, strlen(cfg->SOCKNAME) + 1);
-    if ((bind(fd_server, (struct sockaddr *) &server_address, sizeof(server_address))) !=
-        0) {//assegno l'indirizzo al socket
-        perror("bind");
-        exit(errno);
-    }
-    if ((listen(fd_server, SOMAXCONN)) != 0) {//metto il socket in ascolto
-        perror("listen");
-        exit(errno);
-    }
-    int pipe_fd[2]; // qui creo la pipe
-    if (pipe(pipe_fd) == -1) {
-        perror("pipe fd");
-        exit(EXIT_FAILURE);
-    }
+    CHECK_NEQ_EXIT("bind", bind(fd_server, (struct sockaddr *) &server_address, sizeof(server_address)), 0)
+    CHECK_NEQ_EXIT("listen", listen(fd_server, SOMAXCONN), 0)
+    // Pipe for T.Manager and T.Worker communication
+    int pipe_fd[2];
+    CHECK_NEQ_EXIT("pipe fd", pipe(pipe_fd), 0)
+    // set param for SELECT
     int fd_max = 0;
     fd_set set, tmpset;
     if (fd_server > fd_max) fd_max = fd_server;
-    // azzero sia il master set che il set temporaneo usato per la select
     FD_ZERO(&set);
     FD_ZERO(&tmpset);
-    FD_SET(fd_server, &set);// sara' il descr. su cui faro' nuove connessioni, quindi accept()
-    FD_SET(pipe_fd[0], &set); // per la lettura
+    FD_SET(fd_server, &set);// fd for new connection
+    FD_SET(pipe_fd[0], &set);
     FD_SET(pipe_sig[0], &set);
     if (pipe_fd[0] > fd_max) fd_max = pipe_fd[0];
     if (pipe_sig[0] > fd_max) fd_max = pipe_sig[0];
-    statistics = malloc(sizeof(statistics_t));
+    // set global statistic
+    CHECK_EXIT_VAR("malloc statistics", statistics, malloc(sizeof(statistics_t)), NULL)
     memset(statistics, 0, sizeof(statistics_t));
     statistics->cnt_file_removed = 0;
     statistics->max_mem_used = 0;
     statistics->max_nfile = 0;
-//    int serverGo = 1;
+    // life cycle of server
     while (1) {
-        //printf("okayyyyy\n");
         if (sigINT_sigQUIT == 1) {
-            printf("signal trap SIGINT o SIGQUIT 1\n");
-            fflush(stdout);
+            LOG_PRINT(logfile, "SIGINT o SIGQUIT catched")
             break;
         }
+        // when SIGHUP is catched and there is no client connection
         if(sigHUP == 1 && nclient == 0) {
-//            printf("***********************************************\n");
-//            printf("********nclient : %d || sigHUP : %d *********\n", nclient, sigHUP);
-//            printf("***********************************************\n");
-            printf("signal trap SIGHUP\n");
-            fflush(stdout);
-            sigHUP = 1;
-//            serverGo = 0;
+            LOG_PRINT(logfile, "Server Shutdown...")
             break;
         } else {
-            printf("Waiting for connetions...\n");
-            fflush(stdout);
-            tmpset = set;// necessario perche' select modifica il master set
-            if (select(fd_max + 1, &tmpset, NULL, NULL, NULL) == -1) {
-                perror("select");
-                exit(errno);
-            }
+            tmpset = set;
+            CHECK_EQ_EXIT("select",select(fd_max + 1, &tmpset, NULL, NULL, NULL), -1)
             for (int fd = 0; fd <= fd_max; ++fd) {
-//                printf("fd in atto :: %d\n", fd);
                 struct stat fd_stat;
                 fstat(fd, &fd_stat);
+                // fd ready to be used
                 if (FD_ISSET(fd, &tmpset)) {
                     int fd_client;
+                    // fd for new connection
                     if (fd == fd_server && sigHUP == 0) {
                         fd_client = accept(fd_server, NULL, 0);
-                        printf("Connected ! %d\n", fd);
-                        FD_SET(fd_client, &set);// aggiunggo connection a master set
-                        if (fd_client > fd_max) fd_max = fd_client;
-                        nclient += 1;
-                    } else if (fd == pipe_fd[0]) {//(S_ISFIFO(fd_stat.st_mode)) {
-                        //readn(fd, &size_fd_read, sizeof(unsigned long));
-                        //char * fd_buf = calloc(size_fd_read, sizeof(char*));
+                        LOG_PRINT2_INT(logfile, "new Client conncetion : ", fd_client)
+                        FD_SET(fd_client, &set);// add new fd connection to "set"
+                        if (fd_client > fd_max) fd_max = fd_client; // update fd max for "select" loop
+                        nclient += 1; // +1 client connected to server
+                    } else if (fd == pipe_fd[0]) {
                         int fd_buf;
                         read(fd, &fd_buf, sizeof(int));
-                        fprintf(stderr,"fd_client ritornato nella select letto : %d\n", fd_buf);
-                        // qui dovrei credo fare un while dove dovrei iterare il fdlst, per poi
-                        // reinserire i client che stanno nella lista
+                        LOG_PRINT2_INT(logfile, "client fd reactivated : ",fd_buf)
                         FD_SET(fd_buf, &set);
                         if (fd_buf > fd_max) fd_max = fd_buf;
                     }
                     else if (fd == pipe_sig[0]) {
-                        printf(" ----------- INIT CLOSE SIGHUP----------\n");
-                        fflush(stdout);
-                        sigHUP = 1;
+                        if (sigHUP == 0) {
+                            LOG_PRINT(logfile, "SIGHUP catched")
+                            sigHUP = 1;
+                        }
                     }
-                    else { // se richiesta disponibile
-//                        printf("Request dispo\n");
-                        FD_CLR(fd, &set);// lo tolgo dall'insieme dei descrittori
-                        if (fd == fd_max) fd_max = updatemax(set, fd_max); // aggiorno il max
-                        /*-------------- Request received --------------*/
-                        // Parte di lettura del messaggio
+                    else { // client request available
+                        FD_CLR(fd, &set);
+                        if (fd == fd_max) fd_max = updatemax(set, fd_max); // update max
+                        // Reading message request
                         unsigned char * sms;
-                        recievedMsg_ServerToClient(&sms, fd);
-#if test == 1
-                        printf("fd :%d\n", fd);
-
-#endif
-                        fprintf(stderr,"contenuto del sms : ---- %s ----\n", sms);
+                        recievedMsg(&sms, fd);
                         struct sms_request  * smsArg;
-                        CHECK_EXIT("malloc smsArg", smsArg, malloc(sizeof(struct sms_request)), NULL)
+                        CHECK_EXIT_VAR("malloc smsArg", smsArg, malloc(sizeof(struct sms_request)), NULL)
                         memset(smsArg, 0, sizeof(struct sms_request));
+                        // initialise message structure with useful info for thread worker
                         char * tmp;
-                        char * token = strtok_r((char *) sms, ",", &tmp); // api_id +resto
+                        char * token = strtok_r((char *) sms, ",", &tmp); // api_id
                         smsArg->api_id = strtol(token, NULL, 10);
-                        smsArg->sms_info = tmp;
+                        smsArg->sms_info = tmp; // rest of message
                         smsArg->fd_client_id = fd;
                         smsArg->pipe_fd = pipe_fd[1];
                         smsArg->sockname = cfg->SOCKNAME;
-                        if (smsArg->api_id ==  5) {
-                            int n;
-                            token = strtok_r(NULL, ",", &tmp); // token = pathname, tmp, size
+                        smsArg->logfile = logfile;
+                        if (smsArg->api_id ==  5) { // request : AppendToFile
+                            token = strtok_r(NULL, ",", &tmp); // token = pathname, tmp = size
                             long sz = strtol(tmp, NULL, 10);
                             smsArg->size_buf = sz;
-                            CHECK_EXIT("malloc smsArg", smsArg->sms_content, calloc(sz+1, sizeof(unsigned char)), NULL) // problema con il +1 o altro
-                            CHECK_EXIT("read api_id 5", n, readn(fd, smsArg->sms_content, sz), -1) // problema con il +1 o altro
-                            //printf("sms content : %s", smsArg->sms_content);
+                            // content of file to append in storage
+                            CHECK_EXIT_VAR("calloc smsArg->sms_content", smsArg->sms_content, calloc(sz+1, sizeof(unsigned char)), NULL)
+                            CHECK_EQ_EXIT("readn smsArg->sms_content", readn(fd, smsArg->sms_content, sz), -1)
                         } else {
                             smsArg->sms_content = NULL;
                         }
                         smsArg->storage = &storage;
                         smsArg->son = NULL;
                         smsArg->father = NULL;
+                        // insert message of client request in queue
                         push(&smsArg);
                     }
                 }
             }
-            printQueue(queue);
+//            printQueue(queue); // to see the number of requests in queue
         }
     }
-    printf("USCITA DAL WHILE\n");
-    if (pthread_cond_broadcast(&(queue->queue_cond)) != 0) {
-        // qui mettere controllo di unlock
-        return -1;
-    }
-    printf(" BROADCAST Fatto\n");
-    fflush(stdout);
-    printf("cfg->N_THREAD : %d\n", cfg->N_THREAD);
-    fflush(stdout);
+    CHECK_NEQ_EXIT("pthread_cond_broadcast", pthread_cond_broadcast(&(queue->queue_cond)), 0)
     for (int i = 0; i < cfg->N_THREAD; ++i) {
-        printf("join thread : %d\n", i);
-        if (pthread_join(lst_thread[i], NULL) != 0) {
-            perror("pthread join");
-            return -1;
-        }
-        fprintf(stderr, "join thread : %d\n", i);
+        CHECK_NEQ_EXIT("pthread_join T.Worker", pthread_join(lst_thread[i], NULL), 0)
     }
-    pthread_join(signal_thread, NULL);
-    fprintf(stderr,"--------------------------------------------\n");
-    float mem_used = (float) statistics->max_mem_used/(float ) 1000000;
-    fprintf(stderr, "num max mem usata : %.6f Mbytes\n", mem_used);
-    fprintf(stderr, "num max mem usata : %ld bytes\n", statistics->max_mem_used);
-
-    fprintf(stderr, "num max file inseriti : %ld\n", statistics->max_nfile);
-    fprintf(stderr, "num file removed : %d\n", statistics->cnt_file_removed);
-    fprintf(stderr,"-------------CHIUSURA server-----------------\n");
+    CHECK_NEQ_EXIT("signal_thread Signal", pthread_join(signal_thread, NULL), 0)
+    // table with final statistics
+    fprintf(logfile, "------------------------------------------------------------\n");
+    fprintf(logfile, "-                        STATISTICS                        -\n");
+    fprintf(logfile, "------------------------------------------------------------\n\n");
+    float mem_used = (float) statistics->max_mem_used/(float) 1000000;
+    fprintf(logfile, "Max size reached by storage    : %.6f Mbytes\n", mem_used);
+    fprintf(logfile, "Max number of file in storage  : %ld\n", statistics->max_nfile);
+    fprintf(logfile, "Number of file removed         : %d\n", statistics->cnt_file_removed);
     printStorage(&storage);
+    fprintf(logfile, "\n------------------------------------------------------------\n");
+
+
+    // close and free all
+    // MANCA ROBA
     close(fd_server);
+    fclose(logfile);
     free(statistics);
     free(storage);
+    free(cfg->SOCKNAME);
+    free(cfg->LOGFILE);
     free(cfg);
     return 0;
 }

@@ -36,7 +36,7 @@ $(INC)/conn.o: $(INC)/conn.c $(INC)/conn.h
 $(INC)/API.o: $(INC)/API.c $(INC)/API.h $(INC)/util.o
 	$(CC) $(CCFLAGS) -c $(INC)/API.c -I $(INC) -o $@
 
-$(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h
+$(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h $(INC)/util.o
 	$(CC) $(CCFLAGS) -c $(INC)/configuration.c -I $(INC) -o $@
 
 cleanall:
@@ -46,7 +46,7 @@ cleanall:
 test1: test1server test1client
 test1server:
 	make server
-	valgrind ./server -F config1.txt & # --leak-check=full
+	valgrind ./server -F config.txt & # --leak-check=full
 test1client:
 	make client
 	#chmod +x test1.sh
