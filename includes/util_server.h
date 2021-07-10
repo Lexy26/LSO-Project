@@ -15,6 +15,7 @@ struct sms_request{
     int fd_client_id;
     int pipe_fd;
     char *sockname;
+    FILE * logfile;
     info_storage_t ** storage;
     struct sms_request *son;
     struct sms_request *father;

@@ -1,5 +1,6 @@
-#define _POSIX_C_SOURCE  200112L
+/*      ------      API      ------      */
 
+#define _POSIX_C_SOURCE  200112L
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -14,7 +15,7 @@
 #include "util.h"
 #include "API.h"
 
-#define test 1
+#define test 0
 
 int fd_c;
 
@@ -22,14 +23,11 @@ int fd_c;
 
 //         versione semplificata della openConnection()
 int simple_opneConnection(const char *sockname, int msec, int maxtime) {
-    // creo la connessione con il server
-    CHECK_EXIT("socket", fd_c, socket(AF_UNIX, SOCK_STREAM, 0), -1)
-
-    struct sockaddr_un serv_addr; // setto l'indirizzo
+    CHECK_EXIT_VAR("socket", fd_c, socket(AF_UNIX, SOCK_STREAM, 0), -1)
+    struct sockaddr_un serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
-    strncpy(serv_addr.sun_path, sockname, strlen(sockname) + 1);//do il nome al descr del socket per la connfd
-
+    strncpy(serv_addr.sun_path, sockname, strlen(sockname) + 1);
     while (maxtime) { // ciclo con maxtime limite per aspettare una connessione col server
         // check del timer
         errno = 0;
@@ -45,24 +43,15 @@ int simple_opneConnection(const char *sockname, int msec, int maxtime) {
             return fd_c;
         }
     }
-    printf("fd_c :: %d\n", fd_c);
-
     return -1;
 }
 
-// api_id = 1 OKAY
-int closeConnection(const char *sockname) { // chiusura connessione col server
-    //------- Parte di scrittura del messaggio -------
-#if test == 1
-    printf("Closing socket connection \n");
-#endif
+// api_id = 1
+int closeConnection(const char *sockname) {
     char api_id[3] = "1,";
-    sendMsg_ClientToServer(fd_c, api_id, (char *) sockname, NULL);
-    //------- Parte di lettura del messaggio -------
+    sendMsg(fd_c, api_id, (char *) sockname, NULL);
     unsigned char * check_str;
-    printf("sms rec\n");
-    recievedMsg_ServerToClient(&check_str, fd_c);
-    printf("check_str close : %s\n", check_str);
+    recievedMsg(&check_str, fd_c);
     int check_int = (int) strtol((char*) check_str,  NULL, 10);
     free(check_str);
     close(fd_c);
@@ -70,23 +59,21 @@ int closeConnection(const char *sockname) { // chiusura connessione col server
     return check_int;
 }
 
-// api_id = 2 --- OpenFile -> api_id + pathname +  flag
+// api_id = 2
 int openFile(const char *pathname, int flags) { // O_CREATE = 1 || O_OPEN = 0
     char api_id[3];
     strncpy(api_id, "2,", 3);
-    if (flags == O_CREATE) {// creare file, se gia esiste errore
-        // il server crea il file e lo apre
+    if (flags == O_CREATE) {
         char flagcreate[2];
         strncpy(flagcreate, "1", 2);
-        sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, flagcreate);
-    } else if(flags == O_OPEN) {// apre file gia' esistente
+        sendMsg(fd_c, api_id, (char *) pathname, flagcreate);
+    } else if(flags == O_OPEN) {
         char flagopen[2] = "0";
         strncpy(flagopen, "0", 2);
-        sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, flagopen);
+        sendMsg(fd_c, api_id, (char *) pathname, flagopen);
     }
-    //------- Parte di lettura del messaggio -------
     unsigned char * sms_read;
-    recievedMsg_ServerToClient(&sms_read, fd_c);
+    recievedMsg(&sms_read, fd_c);
     int check_int = (int) strtol((char *) sms_read, NULL, 10);
     free(sms_read);
     return (int) check_int;
@@ -94,15 +81,11 @@ int openFile(const char *pathname, int flags) { // O_CREATE = 1 || O_OPEN = 0
 
 // api_id = 3
 int readFile(const char *pathname, void ** buf, size_t * size) {
-    // invio la richiesta di lettura al server
     char api_id[3] = "3,";
-    sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, NULL);    // ricevo il msg con la size e il contenuto
+    sendMsg(fd_c, api_id, (char *) pathname, NULL);
     int check;
-#if test == 1
-    printf("aspettando una risposta...\n");
-#endif
     char * path;
-    recievedMsg_ServerToClient_Read(&path,(unsigned char **) buf, size, &check, fd_c);
+    receivedMsg_File_Content(&path,(unsigned char **) buf, size, &check, fd_c);
     if (check == 0 || check == 1) {
         return 0;
     } else {
@@ -116,45 +99,44 @@ int readNFiles(int N, const char* dirname) {
     char api_id[3] = "4,";
     char n[BUFSIZE];
     sprintf(n, "%d", N);
-    // invio la richiesta di lettura al server
-    sendMsg_ClientToServer(fd_c, api_id, n, NULL);
-    int file_reading = 1;
-    printf("n file : %s\n", n);
-    while (file_reading) {
-        // ricevo il msg con la size e il contenuto
+    sendMsg(fd_c, api_id, n, NULL);
+    // loop that wait to receive n file or more
+    printf("\n------------------------------------------------------\n");
+    printf("-                      FILE READ                     -\n");
+    printf("------------------------------------------------------\n\n");
+    while (1) {
         unsigned char * sms_content;
         char * path;
         size_t size_buf;
         int check;
-        recievedMsg_ServerToClient_Read(&path, &sms_content, &size_buf, &check, fd_c);
-        printf("- file read : %s\n", path);
+        receivedMsg_File_Content(&path, &sms_content, &size_buf, &check, fd_c);
+        if (path != NULL) {
+            printf("- %s\n", path);
+        }
         if (dirname != NULL && check == 1) {
-            //printf( "Inserimento nella Directory \"%s\"\n", dirname);
-            // inserisco il file ricevuto dal server nella directory data
+            // insert file in directory
             char *base = basename(path);
-            char * filename = malloc((strlen(dirname) +2+ strlen(base))* sizeof(unsigned char));
+            char * filename;
+            CHECK_EXIT_VAR("malloc", filename, malloc((strlen(dirname) +2+ strlen(base))* sizeof(unsigned char)), NULL)
             memset(filename, 0,(strlen(dirname) +2+ strlen(base)));
             strncpy(filename, dirname, strlen(dirname));
             strncat(filename, "/", strlen("/")+1);
             strncat(filename, base, strlen(base)+1);
-            FILE *f = fopen(filename, "wb");
-            if(fwrite(sms_content, size_buf, 1, f)==-1){
-                perror("fwrite");
-            }
+            FILE *f;
+            CHECK_EXIT_VAR("fopen dirname", f, fopen(filename, "wb"), NULL)
+            CHECK_EQ_EXIT("fwrite f", fwrite(sms_content, size_buf, 1, f), -1)
             fclose(f);
-        } else if (check == 0){
-#if test == 1
-            printf("FINE Lettura\n");
-#endif
-            file_reading = 0; // ovvero non ci sono piu file da leggere
-        } else if(check == -1) { //se c'e' stato un qualche errore
+            free(sms_content);
+        } else if (check == 0){// there is no more file o read
+            printf("------------------------------------------------------\n\n");
+            return 0;
+        } else if(check == -1) { //there is a problem when rreading file
             // settare errno ooprtunamente con una macro
+            printf("------------------------------------------------------\n\n");
             return -1;
         }
         //free(path);
-        free(sms_content);
     }
-    return 0;
 }
 
 // api_id = 5
@@ -162,31 +144,30 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     char api_id[3] = "5,";
     char size_char[BUFSIZE];
     sprintf(size_char, "%zu", size);
-    sendMsg_ClientToServer_Append(fd_c, api_id, (char *) pathname, size_char, buf);
-    // ricevo il msg con la size e il contenuto
+    sendMsg_File_Content(fd_c, api_id, (char *) pathname, size_char, buf);
     unsigned char * sms_recieved;
-    recievedMsg_ServerToClient(&sms_recieved, fd_c); // check + lista pathname dei file espulsi
-#if test == 1
-    printf("risposta ricevuta : %s\n", sms_recieved);
-#endif
+    // content of message : check + list of file removed
+    recievedMsg(&sms_recieved, fd_c);
     char * tmp;
     char * token = strtok_r((char *) sms_recieved, ",", &tmp);
     size_t check = strtol(token, NULL, 10);
     if (check == 0) {
+        // check if there are no file removed
         token = strtok_r(NULL, ",", &tmp);
-        if(token != NULL) { //  && strlen((char *) sms_recieved) > 1
-            printf("file espulsi :\n");
+        if(token != NULL) {
+            printf("\n------------------------------------------------------\n");
+            printf("-                    FILE ESPULSI                    -\n");
+            printf("------------------------------------------------------\n\n");
             while (token) {
                 printf(" - %s\n", token);
                 token = strtok_r(NULL, ",", &tmp);
             }
+            printf("\n------------------------------------------------------\n\n");
         }
     } else {
         free(sms_recieved);
-        printf("\n");
         return -1;
     }
-    printf("\n");
     free(sms_recieved);
     return 0;
 }
@@ -194,11 +175,9 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 // api_id = 6
 int closeFile(const char * pathname) {
     char api_id[3] = "6,";
-    // invio la richiesta di lettura al server
-    sendMsg_ClientToServer(fd_c, api_id, (char *) pathname, NULL);
-    // ricevo il msg con la size e il contenuto -------------------------- da qui in poi
+    sendMsg(fd_c, api_id, (char *) pathname, NULL);
     unsigned char * sms;
-    recievedMsg_ServerToClient(&sms, fd_c);
+    recievedMsg(&sms, fd_c);
     size_t check = strtol((char *) sms, NULL, 10);
     if (check == -1) {
         // settare errno opportumanete
@@ -214,25 +193,25 @@ int closeFile(const char * pathname) {
 
 int removeFile(const char * pathname) {
     errno = ENOSYS; // Function not implemented (POSIX.1-2001).
-    printf("Funzionalita' non supportata\n");
+    printf("Functionality not supported\n");
     return -1;
 }
 
 int writeFile(const char *pathname, const char *dirname) {
     errno = ENOSYS; // Function not implemented (POSIX.1-2001).
-    printf("Funzionalita' non supportata\n");
+    printf("Functionality not supported\n");
     return -1;
 }
 
 int lockFile(const char* pathname) {
     errno = ENOSYS; // Function not implemented (POSIX.1-2001).
-    printf("Funzionalita' non supportata\n");
+    printf("Functionality not supported\n");
     return -1;
 }
 
 int unlockFile(const char* pathname) {
     errno = ENOSYS; // Function not implemented (POSIX.1-2001).
-    printf("Funzionalita' non supportata\n");
+    printf("Functionality not supported\n");
     return -1;
 }
 

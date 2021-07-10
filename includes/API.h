@@ -5,25 +5,25 @@
 #define O_CREATE 1
 #define O_OPEN 0
 
-// api_id = 1
+
 int simple_opneConnection(const char *sockname, int msec, int maxtime);
 
-// api_id = 2
+// api_id = 1
 int closeConnection(const char *sockname);
 
-// api_id = 3
+// api_id = 2
 int openFile(const char *pathname, int flags);
 
-// api_id = 4
+// api_id = 3
 int readFile(const char *pathname, void ** buf, size_t * size);
 
-// api_id = 5
+// api_id = 4
 int readNFiles(int N, const char* dirname);
 
-// api_id = 7
+// api_id = 5
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname);
 
-// api_id = 9
+// api_id = 6
 int closeFile(const char * pathname);
 
 

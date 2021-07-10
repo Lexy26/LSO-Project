@@ -15,10 +15,10 @@ void freer(command_t **lst, size_t sz);
 
 int find_absolute_path(char* pathname, char **abs_path);
 
-void openAppendClose(char * pathname, nb_request ** nbRequest, int index);
+int openAppendClose(char * pathname, nb_request ** nbRequest, int index);
 
 int isdot(const char dir[]);
 
-int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, int *totfile, nb_request** nbRequest);
+int recDirectory(char * dirname, long *nfiles, int index, int *totfile, nb_request** nbRequest);
 
 #endif //UTIL_CLIENT_H

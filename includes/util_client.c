@@ -1,32 +1,40 @@
 
-
+//#define _POSIX_C_SOURCE 199309L
 #include <string.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <sys/select.h>
 #include <unistd.h>
+#include <time.h>
+
 
 #include "util_client.h"
 #include "API.h"
 
-#define T_REQUEST 50// limite massimo di richieste possibili da parte di questo client
-#define BUFSIZE 256
-#define test 0
+#define T_REQUEST 50// num max of client request
 
 char *realpath(const char *path, char *resolved_path);
 
 
+
+// is the interruption time between requests
 void timer(int time) {
-    if (time != 0) { // prima che faccia la prossima richiesta aspetta char_t di tempo in
-        sleep(time/1000); // divido per 1000 per avere i millisecondi
-    }
+    struct timeval tv;
+    tv.tv_sec  = time / 1000;
+    tv.tv_usec = (time % 1000) * 1000;
+    select (0, NULL, NULL, NULL, &tv);
 }
 
+/*!
+ * initLstRequest : initialise list of client requests
+ * @param lst_request and return: list of request initialised
+ */
 void initLstRequest(nb_request ** lst_request) {
-    CHECK_EXIT("calloc lst", *lst_request, calloc(1, sizeof(nb_request)),NULL)// spazio suff. per freeare char_abc + msg
-    CHECK_EXIT("calloc lst", (*lst_request)->lst_char_abc, calloc(T_REQUEST, sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
+    CHECK_EXIT_VAR("calloc initLstRequest lst_request", *lst_request, calloc(1, sizeof(nb_request)),NULL)// spazio suff. per freeare char_abc + msg
+    CHECK_EXIT_VAR("calloc initLstRequest list", (*lst_request)->lst_char_abc, calloc(T_REQUEST, sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
     memset((*lst_request)->lst_char_abc, 0, T_REQUEST* sizeof(command_t));
     (*lst_request)->char_f = NULL;
     (*lst_request)->char_h = 0;
@@ -34,20 +42,31 @@ void initLstRequest(nb_request ** lst_request) {
     (*lst_request)->char_t = 0;
 }
 
+/*!
+ * createRequest : create structure of request
+ * @param ptarg : argument of option
+ * @param dirname : for -r and -R option
+ * @param option : determine type of client request
+ * @param pRequest : to insert new request in list
+ * @param index : index of list
+ */
 void createRequest(char *ptarg, char *dirname, char option[2], nb_request ** pRequest, int *index) {
     command_t * char_abc;
-    CHECK_EXIT("calloc", char_abc, calloc(1, sizeof(command_t)), NULL)
+    CHECK_EXIT_VAR("calloc createRequest", char_abc, calloc(1, sizeof(command_t)), NULL)
     (char_abc)->param = ptarg;
     (char_abc)->dirname = dirname;
     strncpy((char_abc)->option, option, 2);
-    //(*pRequest)->lst_char_abc =
     int i = *index;
     (*pRequest)->lst_char_abc[i] = &(*char_abc);
     ++(*pRequest)->tot_request;
     *index += 1;
 }
 
-// *** lst : xke' 1) * equal to command_t in array; 2) * per indicare che e' un array, 3) * perche' non voglio che le modifiche rimangano in locale
+/*!
+ * freer      : free the whole list
+ * @param lst : list of requests
+ * @param sz  : size of list
+ */
 void freer(command_t **lst, size_t sz) {
     for (int i = 0; i < sz; ++i) {
         //free(lst[i]->param);
@@ -58,65 +77,71 @@ void freer(command_t **lst, size_t sz) {
 
 
 /*!
- * Crea e controlla il path assoluto se esiste
- *
- * @param pathname
- * @param abs_path
- * @return
+ * find_absolute_path : Create and check the absolute path
+ * @param pathname    : name of file that i want the path
+ * @param abs_path    : here is the absolute path
+ * @return            : is in abs_path
  */
-int find_absolute_path(char* pathname, char **abs_path){ // funzione di controllo path assoluto
+int find_absolute_path(char* pathname, char **abs_path){
     char *buf = pathname;
     char * abslotue_path;
     errno = 0;
     abslotue_path = realpath(buf, NULL);
     if(abslotue_path == NULL || errno==ENOENT){
-        //printf("cannot find file with name[%s]\n", buf);
-        //free(abslotue_path);
         return -1;
     } else{
         *abs_path = abslotue_path;
-        //free(abslotue_path);
         return 0;
     }
 }
-
+/*!
+ * openAppendClose  : this function ask to open, append content and close file to the server
+ * @param pathname  : pathname of file, that i want read
+ * @param nbRequest : list of client requests
+ * @param index     : index of list
+ * @return          : -1 error, 0 okay
+ */
 int openAppendClose(char * pathname, nb_request ** nbRequest, int index) {
-    if (openFile(pathname, O_CREATE) != 0) { // se file non sessiste e va creato
+    // request to create the file
+    if (openFile(pathname, O_CREATE) != 0) {
+        // request to open the file
         if (openFile(pathname, O_OPEN)==-1) {
+            fprintf(stderr, "Open File [%s] error\n", pathname);
             return -1;
-        }// se file gia esistente
+        }
     }
-    timer((*nbRequest)->char_t); // poiche openFile est una richiesta
-    FILE * f = fopen(pathname, "rb");
+    timer((*nbRequest)->char_t);
+    // read file content
+    FILE * f;
+    CHECK_EXIT_VAR("fopen openAppendClose", f, fopen(pathname, "rb"), NULL)
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char * buf = calloc(fsize + 1, sizeof(char));
+    char * buf;
+    CHECK_EXIT_VAR("calloc buf", buf, calloc(fsize + 1, sizeof(char)), NULL)
     fread(buf, fsize, 1, f);
     fclose(f);
     buf[fsize] = 0;
-    //printf("file da inserire : %s\n", buf);
     if(appendToFile(pathname, buf, fsize, (*nbRequest)->lst_char_abc[index]->dirname)==-1) {
+        fprintf(stderr, "Append File [%s] error\n", pathname);
         return -1;
     }
     free(buf);
-#if test == 1
-    printf("!!!!!   Elemento inserito   !!!!!!!\n");
-#endif
     timer((*nbRequest)->char_t);
     if(closeFile(pathname)==-1) {
+        fprintf(stderr, "Close File [%s] error\n", pathname);
         return -1;
     }
-#if test == 1
-    printf("!!!!!   Elemento chiuso   !!!!!!!\n");
-#endif
+    if ((*nbRequest)->char_p == 1) {
+        fprintf(stderr, "FILE : %s | SIZE : %ld\n", pathname, fsize);
+    }
     return 0;
 }
 
 /*!
- *
- * @param dir
- * @return
+ * isdot      : check if current dir is a point
+ * @param dir : current directory
+ * @return : 0 okay, 1 not okay
  */
 int isdot(const char dir[]) {
     int l = (int) strlen(dir);
@@ -124,75 +149,56 @@ int isdot(const char dir[]) {
     return 0;
 }
 
+
 /*!
- * Check a fondo per trovare n file nella directory dirname
- *
- * @param dirname
- * @param lst_of_files
- * @param nfiles
- * @param ram_sz
- * @param index
+ * recDirectory     : recursive search of nfile or all
+ * @param dirname   : name of directory
+ * @param nfiles    : number of file to ask to insert in storage to server
+ * @param index     : index of requests list
+ * @param totfile   : in case you know the total number of files to extract totfile = -1
+ * @param nbRequest : list of requests
  * @return
  */
-int recDirectory(char * dirname, char ** lst_of_files, long *nfiles, int index, int *totfile, nb_request **nbRequest) {
-    DIR *dir= opendir(dirname);
-    if(dir == NULL) {
-        perror("opendir");
-        return 1;
-    } else {
-#if test == 1
-        fprintf(stdout, "------------------Directory %s:-----------------\n", dirname);
-#endif
-        struct dirent* ent; // file, directory etc..
-        while ((ent = readdir(dir)) != NULL) { // itera e stampa tutto cio che si trova nella cartella dirname
-            int lendir = (int) strlen(dirname) + 1;
-            int lenstanga = strlen("/") + 1;
-            //int lenname = strlen(ent->d_name) + 1;
-            int len = lendir + lenstanga + BUFSIZE;// 1 e' per '\0'
-            char next_path[len];
-            memset(next_path, '\0', len);
-            strncpy(next_path, dirname, strlen(dirname));
-            strncat(next_path, "/", 2);
-            strncat(next_path, ent->d_name, BUFSIZE);
-            struct stat st;
-            stat(next_path, &st); // controllo dell'errore, va aggiunto
-            if(*nfiles < 1 && *totfile < 0) {
-#if test == 1
-                fprintf(stdout, "-----------------------------------------------\n");
-#endif
-                closedir(dir);
-                return 0;
-            } else {
-                if (S_ISDIR(st.st_mode)) {
-                    // se est una directory allora entro in profondita'
-                    // e' una directory
-                    if(!isdot(next_path)) {
-                        recDirectory(next_path, lst_of_files, nfiles, index, totfile, nbRequest); // con la recursione
-                    }
-                } else {
-                    // e' un file
-                    char * dir_abspath;
-                    if (find_absolute_path(next_path, &dir_abspath) == -1) {
-                        printf("absolute path of dirname isn't correct\n");
-                        exit(EXIT_FAILURE);
-                    }
-                    if (*totfile < 0) { // nel caso sapessi il numero totale dei file da estrapolare totfile = -1
-                        printf("file : %s\n", dir_abspath);
-
-                        openAppendClose(dir_abspath, nbRequest, index);
-                        --*nfiles;
-                    } else {
-//                        printf("file : %s\n", dir_abspath);
-                        openAppendClose(dir_abspath, nbRequest, index);
-                    }
+int recDirectory(char * dirname, long *nfiles, int index, int *totfile, nb_request **nbRequest) {
+    DIR *dir;
+    CHECK_EXIT_VAR("opendir", dir, opendir(dirname), NULL)
+    struct dirent* ent; // file, directory etc..
+    while ((ent = readdir(dir)) != NULL) {
+        int lendir = (int) strlen(dirname) + 1;
+        int lenstanga = strlen("/") + 1;
+        int len = lendir + lenstanga + BUFSIZE;
+        char next_path[len];
+        memset(next_path, '\0', len);
+        strncpy(next_path, dirname, strlen(dirname));
+        strncat(next_path, "/", 2);
+        strncat(next_path, ent->d_name, BUFSIZE);
+        struct stat st;
+        CHECK_EQ_EXIT("stat", stat(next_path, &st), -1)
+        if(*nfiles < 1 && *totfile < 0) {
+            closedir(dir);
+            return 0;
+        } else {
+            if (S_ISDIR(st.st_mode)) {
+                if(!isdot(next_path)) {
+                    recDirectory(next_path, nfiles, index, totfile, nbRequest);
                 }
+            } else {
+                // is a file
+                char * dir_abspath;
+                if (find_absolute_path(next_path, &dir_abspath) == -1) {
+                    fprintf(stderr, "Path of directory [%s] doesn't exist\n", next_path);
+                    exit(EXIT_FAILURE);
+                }
+                if (*totfile < 0) {
+                    openAppendClose(dir_abspath, nbRequest, index);
+                    --*nfiles;
+                } else {
+                    openAppendClose(dir_abspath, nbRequest, index);
+                }
+                free(dir_abspath);
             }
         }
-#if test == 1
-        fprintf(stdout, "-----------------------------------------------\n");
-#endif
-        closedir(dir);
-        return 0;
-
     }
+    closedir(dir);
+    return 0;
 }

@@ -13,8 +13,8 @@
 #include "util.h"
 #include "conn.h"
 
-#define test 0
-#define TEST_LOCK 0
+#define test 1
+#define TEST_LOCK 1
 
 //extern pthread_mutex_t mutex;
 extern queue_t * queue;
@@ -28,7 +28,7 @@ void createQueue(queue_t ** pQueue) {
     (*pQueue)->count_rq = 0;
     (*pQueue)->head = NULL;
     (*pQueue)->last = NULL;
-    printf("Queue create \n");
+    fprintf(stderr,"Queue create \n");
 }
 
 // insert element in queue
@@ -75,13 +75,13 @@ void printQueue() {
     int count = queue->count_rq;
     struct sms_request * current = queue->head;
     pthread_mutex_lock(&queue->lock);
-    printf("********* QUEUE **********\n");
+    fprintf(stderr,"************* QUEUE **************\n");
     while (count > 0) {
         fprintf(stderr,"fd client : %d\n", current->fd_client_id);
         current = current->son;
         count -= 1;
     }
-    printf("**************************\n");
+    fprintf(stderr,"**********************************\n");
     pthread_mutex_unlock(&queue->lock);
 }
 
@@ -99,9 +99,7 @@ void * threadSignal(void * arg) {
         }
         switch (sig) {
             case SIGHUP:
-                printf("Signal handling : SIGHUP\n");
-                fflush(stdout);
-                sigHUP = 1;
+                fprintf(stderr, "Signal handling : SIGHUP\n");
                 close(pipe_s);
                 return (void *) 0;
             case SIGQUIT:
@@ -171,11 +169,10 @@ void* threadF(void* args) {
                 CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                 sms_write->str = (unsigned char *) "-1";
             }
-            int notused;
             printf("size close : %zu\n", sms_write->len);
             printf("contnent : %s\n", sms_write->str);
-            CHECK_EXIT("write ClConn size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-            CHECK_EXIT("write ClConn sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+            CHECK_EQ_EXIT("write ClConn size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EQ_EXIT("write ClConn sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 #if test == 1
             fprintf(stderr,"Chiusura socket client : %d\n\n", request->fd_client_id);
             fprintf(stderr,"client prova a connettersi\n");
@@ -258,18 +255,17 @@ void* threadF(void* args) {
                     }
                     if(cond==1) {// vuol dire che file sempre occupato da un altro client
                         sms_write->len = strlen("-1"); // errore
-                        CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                        CHECK_EXIT_VAR("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                         sms_write->str = (unsigned char *) "-1";
                     } else {
                         sms_write->len = strlen("0");
-                        CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)),NULL)
+                        CHECK_EXIT_VAR("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)),NULL)
                         sms_write->str = (unsigned char *) "0";
                     }
                 }
             }
-            int notused;
-            CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-            CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+            CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
             writen(request->pipe_fd, &request->fd_client_id, sizeof(int)); // reinserisco il client per la select
 #if test == 1
             printf("------------------ STORAGE 2 ------------------\n");
@@ -295,9 +291,8 @@ void* threadF(void* args) {
                 sms_write->len = strlen("-1")+1; // errore
                 CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                 sms_write->str = (unsigned char *) "-1";
-                int notused;
-                CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-                CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+                CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+                CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 
 //                unsigned char nnt[5] = "null";
 //                sendMsg_ClientToServer_Append(request->fd_client_id,"-1,",file_read->pathname, "5", nnt);
@@ -313,19 +308,14 @@ void* threadF(void* args) {
                 pthread_mutex_lock(&(*request->storage)->lock);
                 if(file_read->fdClient_id != request->fd_client_id) {
                     sms_write->len = strlen("-1")+1; // errore
-                    CHECK_RETURN("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
+                    CHECK_EXIT_VAR("calloc sms_write->str", sms_write->str, calloc(sms_write->len, sizeof(unsigned char)), NULL)
                     sms_write->str = (unsigned char *) "-1";
-                    int notused;
-                    CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-                    CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
-
-//                    unsigned char nnt[5] = "null";
-//                    sendMsg_ClientToServer_Append(request->fd_client_id, "-1,", file_read->pathname, "5", nnt);
+                    CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+                    CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
                 } else {
-                    //while(file_read->fdClient_id != request->fd_client_id){}
                     char size_char[BUFSIZE];
                     sprintf(size_char, "%ld", file_read->file_sz);// okay 0 + size + buf
-                    sendMsg_ClientToServer_Append(request->fd_client_id,"1,",file_read->pathname, size_char, file_read->init_pointer_file);
+                    sendMsg_File_Content(request->fd_client_id,"1,",file_read->pathname, size_char, file_read->content_file);
 
                 }
 #if TEST_LOCK == 1
@@ -368,7 +358,7 @@ void* threadF(void* args) {
                 } else {
                     char size_char[BUFSIZE];
                     sprintf(size_char, "%ld", current->file_sz);
-                    sendMsg_ClientToServer_Append(request->fd_client_id,"1,",current->pathname, size_char, current->init_pointer_file);
+                    sendMsg_File_Content(request->fd_client_id,"1,",current->pathname, size_char, current->content_file);
                     current->fdClient_id = -1;
                     current = current->son;
                     --n_read;
@@ -396,9 +386,8 @@ void* threadF(void* args) {
 //                unsigned char notused[5] = "null";
 //                sendMsg_ClientToServer_Append(request->fd_client_id,"0,","00", "5", notused);//avverto che e' tutto finito
             }
-            int notused;
-            CHECK_EXIT("write openfile size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-            CHECK_EXIT("write openfile sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+            CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 
             writen(request->pipe_fd, &request->fd_client_id, sizeof(int)); // reinserisco il client
 
@@ -478,9 +467,8 @@ void* threadF(void* args) {
             // update max nfile inseriti
             long tot_nfile = (*request->storage)->nfile_tot - (*request->storage)->nfile_dispo;
             if (tot_nfile > statistics->max_nfile) statistics->max_nfile = tot_nfile;
-            int notused;
-            CHECK_EXIT("write ClConn size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-            CHECK_EXIT("write ClConn sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+            CHECK_EQ_EXIT("write ClConn size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EQ_EXIT("write ClConn sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 #if test == 1
             printf("------------------ STORAGE 5 ------------------\n");
             printf("ram dispo    : %ld\n", (*request->storage)->ram_dispo);
@@ -530,9 +518,8 @@ void* threadF(void* args) {
                     sms_write->str = (unsigned char *) "0";
                 }
             }
-            int notused;
-            CHECK_EXIT("write ClConn size", notused, writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
-            CHECK_EXIT("write ClConn sms", notused, writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
+            CHECK_EQ_EXIT("write ClConn size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
+            CHECK_EQ_EXIT("write ClConn sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
 #if test == 1
             printf("chiusura file\n");
             printf("------------------ STORAGE 6 ------------------\n");

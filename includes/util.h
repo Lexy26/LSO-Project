@@ -5,24 +5,20 @@
 #define BUFSIZE 256
 #endif
 
-#if !defined(SOCKNAME)
-#define SOCKNAME "/tmp/cs_sock"
-#endif
-
-// struct messaggio utile per far comunicare client-server
+// message structure client-server communication
 typedef struct {
     size_t len;
     unsigned char *str;
 } msg_t;
 
-// struct utile al client
+// structure for command information
 typedef struct {
     char option[2];
     char *param; // optarg, cio' che sta dopo l'opzione opt
     char * dirname;
 } command_t;
 
-// struct utile al client
+// structure to list requests
 typedef struct {
     int tot_request;
     int char_t;
@@ -32,8 +28,25 @@ typedef struct {
     command_t ** lst_char_abc;
 }nb_request;
 
-// check del valore con uscita
-#define CHECK_EXIT(name, var, sc, check)    \
+// print per il file di log
+#define LOG_PRINT(file, content) fprintf(file, "%s | %s ==== %s\n", __DATE__, __TIME__,content);
+
+#define LOG_PRINT2_INT(file, content1, content2) fprintf(file, "%s | %s ==== %s %d\n", __DATE__, __TIME__, content1, content2);
+
+// SYSCALL Control
+#define CHECK_NEQ_EXIT(name, sc, check)    \
+    if ((sc) != (check)) {                \
+    perror(#name);                \
+    exit(errno);            \
+    }
+
+#define CHECK_EQ_EXIT(name, sc, check)    \
+    if ((sc) == (check)) {                \
+    perror(#name);                \
+    exit(errno);            \
+    }
+
+#define CHECK_EXIT_VAR(name, var, sc, check)    \
     if (((var)=(sc)) == (check)) {                \
     perror(#name);                \
     exit(errno);            \
@@ -45,18 +58,20 @@ typedef struct {
     int err = errno;                          \
     errno = err;\
     }
-int sendMsg_ClientToServer_Append(int fd_c, char api_id[3], char *arg1, char * arg2, unsigned char* arg3);
 
 
-int sendMsg_ClientToServer(int fd_c, char api_id[3], char *arg1, char * arg2);
+void sendMsg_File_Content(int fd_c, char *api_id, char *arg1, char * arg2, unsigned char* arg3);
 
 
-void recievedMsg_ServerToClient(unsigned char ** messaggio,int fd_c);
+void sendMsg(int fd_c, char api_id[3], char *arg1, char * arg2);
 
 
-void recievedMsg_ServerToClient_Read(char ** pathname, unsigned char** sms_content, size_t * size_buf,int * check, int fd_c);
+void receivedMsg_File_Content(char ** pathname, unsigned char** sms_content, size_t * size_buf,int * check, int fd_c);
 
-// cio' che -h stampera' in stdout
+
+void recievedMsg(unsigned char ** message,int fd_c);
+
+// Output of -h command
 #define PRINT_H printf("\nFile Storage Server - Progetto di Laboratorio di Sistemi Operativi 2020/2021\n");\
 printf("\nusage: ./client options [parameters]\n");\
 printf("\n OPTIONS:\n   -h \t\t\t\t\tStampa la lista di tutte le opzioni accettate dal client\n");\
@@ -66,7 +81,7 @@ printf("\n   -w dirname[,n=0]   \t\t\tInvia al server i file nella cartella ‘d
 "\n\t\t\t\t\tinviare al server (tuttavia non è detto che il server possa scriverli tutti)\n");\
 printf("\n   -W file1[,file2]   \t\t\tLista di nomi di file da scrivere nel server separati da ‘,’\n");\
 printf("\n   -r file1[,file2]   \t\t\tLista di nomi di file da leggere dal server separati da ‘,’\n");\
-printf("\n   -R [n=0]   \t\t\t\tTale opzione permette di leggere ‘n’ file qualsiasi attualmente memorizzati nel server"\
+printf("\n   -R n=0     \t\t\t\tTale opzione permette di leggere ‘n’ file qualsiasi attualmente memorizzati nel server"\
 "\n\t\t\t\t\tse n=0 (o non è specificato) allora vengono letti tutti i file presenti nel server\n");\
 printf("\n   -d dirname \t\t\t\tCartella in memoria secondaria dove scrivere i file letti dal server con l’opzione ‘-r’ o ‘-R’\n");\
 printf("\n   -t time\t\t\t\tTempo in millisecondi che intercorre tra l’invio di due richieste successive al server (se non"\
