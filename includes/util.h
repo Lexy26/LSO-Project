@@ -59,6 +59,17 @@ typedef struct {
     errno = err;\
     }
 
+#define LOCK(mutex, res) \
+    if (pthread_mutex_lock(mutex)!=0) { \
+        fprintf(stderr, "LOCK Error\n");  \
+        return res;      \
+            }   \
+
+#define UNLOCK(mutex, res) \
+    if (pthread_mutex_unlock(mutex)!=0) { \
+        fprintf(stderr, "UNLOCK Error\n");		    \
+        return res;			    \
+  }
 
 void sendMsg_File_Content(int fd_c, char *api_id, char *arg1, char * arg2, unsigned char* arg3);
 

@@ -27,11 +27,11 @@ typedef struct {
     struct sms_request *last;
     pthread_cond_t queue_cond; // Cond variable
     pthread_mutex_t lock; // var per mutua esclusione
-    int thread_occupato;
 } queue_t;
 
 typedef struct {
-    int pipe;
+    int pipe_hup;
+    int pipe_int_quit;
     sigset_t  * set_sig;
 }signalHandler_t;
 

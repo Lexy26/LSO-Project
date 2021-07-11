@@ -13,7 +13,7 @@ typedef struct node {
     int fdClient_id; // int fd, quindi open || -1 close
     int modified;
     unsigned char * content_file;
-    unsigned char * init_pointer_file;
+//    unsigned char * init_pointer_file;
     struct node *son;
     struct node *father;
 } node_t;
@@ -47,13 +47,10 @@ int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, ch
 int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content, int * nfile_removed);
 
 
-int removeSpecificFile(char * pathname, info_storage_t ** storage, char ** pathname_removed);
+void printStorage(info_storage_t ** storage, FILE * logfile);
 
 
-int printStorage(info_storage_t ** storage);
-
-
-int freerStorage(info_storage_t ** storage);
+void freerStorage(info_storage_t ** storage);
 
 
 #endif //FILE_STORAGE_H

@@ -133,7 +133,7 @@ int openAppendClose(char * pathname, nb_request ** nbRequest, int index) {
         return -1;
     }
     if ((*nbRequest)->char_p == 1) {
-        fprintf(stderr, "FILE : %s | SIZE : %ld\n", pathname, fsize);
+        fprintf(stderr, "File : %s\nSize : %ld\n", pathname, fsize);
     }
     return 0;
 }

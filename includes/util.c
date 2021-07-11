@@ -122,13 +122,11 @@ void receivedMsg_File_Content(char ** pathname, unsigned char** sms_content, siz
         *check = 1;
         free(sms);
     } else if (strncmp(token, "0", 1)==0){ // there are no more files to read
-        printf("finito tutto in bellezza \n");
         *size_buf = 0;
         *sms_content = NULL;
         *check = 0;
         *pathname = NULL;
     } else { // error, something went wrong
-        printf("errore \n");
         *size_buf = 0;
         *sms_content = NULL;
         *check = -1;

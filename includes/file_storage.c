@@ -9,36 +9,39 @@
 #include "util.h"
 #include "file_storage.h"
 
-#define test 0
 #define TEST_LOCK 0
 
-//extern statistics_t *statistics;
 
-// Inizializza la struttura del nodo
+/*!
+ * createFileNode : initialise file node structure
+ * @param name : pathname
+ * @param fd : fd client who create this file
+ * @return : file node
+ */
 struct node *createFileNode(char * name, int fd) {
-    struct node *new_node = malloc(sizeof(struct node));
+    struct node *new_node;
+    CHECK_EXIT_VAR("malloc new node", new_node, malloc(sizeof(struct node)), NULL)
     memset(new_node, 0, sizeof(struct node));
-    //CHECK_EXIT("calloc new node", new_node, calloc(1, sizeof(struct node)), NULL)
-//    struct stat st;
-//    stat(name, &st);
-//    long size = st.st_size;
-    new_node->file_sz = 0;//in byte usando stat
+    new_node->file_sz = 0; // in byte
     new_node->fdClient_id = fd;
     new_node->son = NULL;
     new_node->father = NULL;
     new_node->pathname = name;
     new_node->content_file = malloc(sizeof(unsigned char)+1);
     memset(new_node->content_file, 0, sizeof(unsigned char)+1);
-    new_node->init_pointer_file = new_node->content_file;
     new_node->modified = -1;
     return new_node;
 }
 
-// inizializza lo storage
+/*!
+ * createStorage : create and initialise the storage
+ * @param ram : memory size of storage given by the configuration file
+ * @param nfile : file number given by the configuration file
+ * @return      : storage struct initialised
+ */
 info_storage_t *createStorage(long ram, long nfile) {
-
     info_storage_t *storage_init;
-    CHECK_EXIT("calloc storage init", storage_init, calloc(1, sizeof(info_storage_t)), NULL)
+    CHECK_EXIT_VAR("calloc storage init", storage_init, calloc(1, sizeof(info_storage_t)), NULL)
 
     storage_init->head = NULL;
     storage_init->last = NULL;
@@ -48,170 +51,179 @@ info_storage_t *createStorage(long ram, long nfile) {
 
     storage_init->ram_dispo = ram;
     storage_init->ram_tot = ram;
-
-    pthread_mutex_init(&storage_init->lock, NULL);
-
-    printf("Storage create \n");
-
+    CHECK_NEQ_EXIT("pthread_mutex_init", pthread_mutex_init(&storage_init->lock, NULL), 0)
+    fprintf(stderr, "Storage create \n");
     return storage_init;
 }
 
-// revisione fatta, sembra corretto
-int removeFile(struct node **file_remove, char ** rm_path, info_storage_t **storage, struct node ** current_file, int * nfile_removed) {//First in Last out
-    // se il file non e' aperto oppure est stato modificato almeno una volta, allora lo posso togliere dallo storage
-    if ((*file_remove)->fdClient_id == -1) {// && (*file_remove)->modified != 0
-        printf("Rimozione in corso ... : %s\n", (*file_remove)->pathname);
+/*!
+ * removeFile           : removes the file from storage and updates the storage
+ * @param file_remove   : file that should be removed
+ * @param rm_path       : if file removed, save path of removed file in this variable
+ * @param storage       : if file removed, update storage
+ * @param current_file  : if file removed, updates the pointer to the storage
+ * @param nfile_removed : if file removed, increase the variable by one
+ * @return              : file removed (0) | file not removed (-1)
+ */
+int removeFile(struct node **file_remove, char ** rm_path, info_storage_t **storage, struct node ** current_file, int * nfile_removed) {
+    if ((*file_remove)->fdClient_id == -1) {
+        fprintf(stderr, "Rimozione in corso ... : %s\n", (*file_remove)->pathname);
         (*nfile_removed) += 1;
         struct node *tmp = (*file_remove);
         if ((*file_remove)->son == NULL) { // remove e aggiorno last file
-            //printf("il nodo est LAST\n");
-            if ((*file_remove)->father == NULL) { // unico nodo
+            // only one node remains
+            if ((*file_remove)->father == NULL) {
                 (*storage)->head = NULL;
                 (*storage)->last = NULL;
                 *current_file = NULL;
-            } else {// e' LAST
+            } else {
+                // is LAST node
                 (*storage)->last = (*file_remove)->father;
                 (*storage)->last->son = NULL;
                 *current_file = (*storage)->last;
             }
-        } else { // NB : rimuovo da LAST alla HEAD
-            if ((*file_remove)->father == NULL) { // e' HEAD
-                //printf("e' la HEAD\n");
+        } else { // NB : remove from LAST to HEAD
+            if ((*file_remove)->father == NULL) {
+                // is HEAD node
                 (*storage)->head = (*file_remove)->son;
                 (*file_remove)->son->father = NULL;
                 *current_file = NULL;
-            } else { // e' in MIDDLE
-                //printf("e' un MIDDLE\n");
+            } else {
+                // is in the MIDDLE
                 (*file_remove)->father = (*file_remove)->son;
                 (*file_remove)->son = (*file_remove)->father;
                 *current_file = (*file_remove)->father;
             }
         }
-        *rm_path = realloc(*rm_path, strlen(*rm_path) + strlen((tmp)->pathname)+2);
+        CHECK_EXIT_VAR("realloc rm_path", *rm_path, realloc(*rm_path, strlen(*rm_path) + strlen((tmp)->pathname)+2), NULL)
         strncat(*rm_path, ",", 2);
         strncat(*rm_path, (tmp)->pathname, strlen((tmp)->pathname));
-        // aggiorno ram, numero di file e il counter di file rimossi
+        // update storage parameters
         (*storage)->ram_dispo += (tmp)->file_sz;
         (*storage)->nfile_dispo += 1;
+        free(tmp->content_file);
         free(tmp);
         return 0;
     }
     return -1;
 }
 
-
+/*!
+ * searchFileNode    : search file structure that i need
+ * @param pathname   : path of file structure searched
+ * @param storage    : search file from the storage
+ * @param file_found : save file found in this variable
+ * @return           : file found (0) | not found (-1)
+ */
 int searchFileNode(char * pathname, info_storage_t ** storage, struct node ** file_found) {
-    // search file a specific file in storage
-    //printf("tot : %ld, dispo : %ld\n", storage->nfile_tot, storage->nfile_dispo);
-    pthread_mutex_lock(&(*storage)->lock);
-#if TEST_LOCK == 1
-    printf("searchFileNode LOCK\n");
-#endif
+    LOCK(&(*storage)->lock, -1)
     long nb_file_check = (*storage)->nfile_tot-(*storage)->nfile_dispo;
     struct node * current;
     current = (*storage)->head;
     while (nb_file_check != 0) {
-//        printf("pathname : %s\n", (current)->pathname);
+        // file found
         if (strncmp((current)->pathname, pathname, strlen(pathname))==0){
-            //printf("trovato !!\n");
             *file_found = current;
-#if TEST_LOCK == 1
-            printf("searchFileNode UNLOCK\n");
-#endif
-            pthread_mutex_unlock(&(*storage)->lock);
+            UNLOCK(&(*storage)->lock, -1)
             return 0;
         } else {
-            current = (current)->son;
+            current = (current)->son; // next
         }
         nb_file_check -= 1;
     }
-#if TEST_LOCK == 1
-    printf("searchFileNode UNLOCK\n");
-#endif
-    pthread_mutex_unlock(&(*storage)->lock);
+    UNLOCK(&(*storage)->lock, -1)
     return -1;
 }
 
+/*!
+ * insertCreateFile      : insert newly created file node, without content
+ * @param node_to_insert : node to insert in storage
+ * @param storage        : storage
+ * @param buf_rm_path    : var where save removed file
+ * @param nfile_removed  : if file removed, increase the variable by one
+ * @return               : insert (0) | not insert (-1)
+ */
 int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int * nfile_removed) {
     if ((*storage)->nfile_dispo <= 0) {
         int cnt = 0;
         struct node *current_file = (*storage)->last;
         struct node *current_ptr;
+        // if i have reached the maximum number of files on the storage
+        // loop to remove files from the storage until enough space is freed up to insert the new file
         while ((*storage)->nfile_dispo <= 0 && cnt < TIMER) {
             current_file = (*storage)->last;
             while (current_file != NULL && (*storage)->nfile_dispo <= 0) {
-                pthread_mutex_lock(&(*storage)->lock);
+                LOCK(&(*storage)->lock, -1)
                 if (removeFile(&(current_file), &(*buf_rm_path), &(*storage), &current_ptr, &(*nfile_removed))) {
                     current_file = (current_file)->father;
                 } else {
                     current_file = current_ptr;
                 }
-                pthread_mutex_unlock(&(*storage)->lock);
+                UNLOCK(&(*storage)->lock, -1)
             }
             sleep((unsigned int) SLEEP_TIME);
             ++cnt;
         }
+        // if space is still insufficient
         if ((*storage)->nfile_dispo <= 0) {
             return -1;
         }
     }
-    pthread_mutex_lock(&(*storage)->lock);
-#if TEST_LOCK == 1
-    printf("insertCreateFile 1 LOCK\n");
-#endif
-    if ((*storage)->head == NULL && (*storage)->last == NULL) { // ancora nessun file nello storage
-        // se il primo file inserito ha una dimensione > della dim dello storage allora non lo inserisco
+    // if no problem, insert new file in storage
+    LOCK(&(*storage)->lock, -1)
+    if ((*storage)->head == NULL && (*storage)->last == NULL) {
         (*storage)->head = *node_to_insert;
         (*storage)->last = *node_to_insert;
-        (*storage)->nfile_dispo -= 1;
     } else {
         struct node *tmp_head = (*storage)->head;
-        (*storage)->head = *node_to_insert;//aggiorno la head ptr dello storage col nuovo file
+        (*storage)->head = *node_to_insert;
         (*node_to_insert)->son = tmp_head;
         (tmp_head)->father = *node_to_insert;
-        // aggiorna disponibilita' dello spazio in memoria
-        (*storage)->nfile_dispo -= 1;
     }
-#if TEST_LOCK == 1
-    printf("insertCreateFile 1.1 UNLOCK\n");
-#endif
-    pthread_mutex_unlock(&(*storage)->lock);
+    (*storage)->nfile_dispo -= 1;
+    UNLOCK(&(*storage)->lock, -1)
     return 0;
 
 }
 
+/*!
+ * UpdateFile            : add the content to the file already created
+ * @param node_to_insert : node to which i need to update the content
+ * @param storage        : global storage
+ * @param buf_rm_path    : var where save removed file
+ * @param fd_current     : is the client interested in updating the file
+ * @param size_buf       : size of content
+ * @param content        : is the content i have to add
+ * @param nfile_removed  : if file removed, increase the variable by one
+ * @return               : update done (0) | update error (-1)
+ */
 int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content, int * nfile_removed) { // First in Last out
-    // se file size > sz storage, rimuovo il file stesso
+    // if file size is bigger than the global size of storage, delete file itself
     if((*storage)->ram_tot - size_buf < 0 && (*node_to_insert)->modified ==-1) {
         struct node *notused;
-        printf("UpdateFile 1 LOCK\n");
-        pthread_mutex_lock(&(*storage)->lock);
+        LOCK(&(*storage)->lock, -1)
         (*node_to_insert)->fdClient_id = -1;
         removeFile(&(*node_to_insert), &(*buf_rm_path), &(*storage), &notused, &(*nfile_removed));
-        pthread_mutex_unlock(&(*storage)->lock);
-        printf("UpdateFile 1 UNLOCK\n");
+        UNLOCK(&(*storage)->lock, -1)
         return -1;
     }
-    if((*storage)->ram_dispo - size_buf < 0) { // se ci sono piu' file nello storgae
+    // if insufficient memory, remove as many files as necessary
+    if((*storage)->ram_dispo - size_buf < 0) {
         struct node *is_removable = (*storage)->last;
         struct node *current_file;
+        // 'cnt' is necessary to prevent the cycle from going to infinity
         int cnt = 0;
         while (((*storage)->ram_dispo - size_buf < 0) && cnt < TIMER) {
             is_removable = (*storage)->last;
             while (is_removable != NULL && ((*storage)->ram_dispo - size_buf < 0)) {
-//                printf("Current file storgae SIZE : %ld\ncurrent szie file : %ld\ncurrent file : %s\n",
-//                       (*storage)->ram_dispo, (is_removable)->file_sz, (is_removable)->pathname);
-                printf("UpdateFile 2 UNLOCK\n");
-                pthread_mutex_lock(&(*storage)->lock);
+                LOCK(&(*storage)->lock, -1)
                 if (removeFile(&(is_removable), &(*buf_rm_path), &(*storage), &(current_file), &(*nfile_removed)) == -1) {
-                    // se file aperto da qualqun'altro , continuo a cercare nello storage
-                    is_removable = (is_removable)->father; // check allora se un'altro file non est in stato aperto
+                    // if the current file is open from another client, check next file
+                    is_removable = (is_removable)->father;
                 }
                 is_removable = current_file;
-                pthread_mutex_unlock(&(*storage)->lock);
-                printf("UpdateFile 2 UNLOCK\n");
+                UNLOCK(&(*storage)->lock, -1)
             }
-//            printf("Current file storgae fuori while SIZE : %ld\n", (*storage)->ram_dispo);
             sleep((unsigned int) SLEEP_TIME);
             ++cnt;
         }
@@ -224,92 +236,50 @@ int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** 
         sleep((unsigned int) SLEEP_TIME);
         ++cnt;
     }
-#if TEST_LOCK == 1
-    printf("UpdateFile 4 LOCK\n");
-#endif
-    pthread_mutex_lock(&(*storage)->lock);
+    LOCK(&(*storage)->lock, -1)
     if(fd_current != (*node_to_insert)->fdClient_id) {
-#if TEST_LOCK == 1
-        printf("UpdateFile 4.1 UNLOCK\n");
-#endif
-        pthread_mutex_unlock(&(*storage)->lock);
+        UNLOCK(&(*storage)->lock, -1)
         return -1;
     } else {
-        (*node_to_insert)->content_file = realloc((*node_to_insert)->content_file, size_buf+(*node_to_insert)->file_sz+1);
-        (*node_to_insert)->init_pointer_file = (*node_to_insert)->content_file;
+        CHECK_EXIT_VAR("realloc content file", (*node_to_insert)->content_file, realloc((*node_to_insert)->content_file, size_buf+(*node_to_insert)->file_sz+1), NULL)
         memcpy((*node_to_insert)->content_file + (*node_to_insert)->file_sz, content, size_buf);
         (*node_to_insert)->file_sz += size_buf;
         (*storage)->ram_dispo -= size_buf;
         (*node_to_insert)->modified = 1;
-#if TEST_LOCK == 1
-        printf("UpdateFile 4.2 UNLOCK\n");
-#endif
-        pthread_mutex_unlock(&(*storage)->lock);
+        UNLOCK(&(*storage)->lock, -1)
         return 0;
     }
 }
 
-//int removeSpecificFile(char * pathname, info_storage_t ** storage, char ** pathname_removed) {
-//    // se voglio rimuovere uno specifico file
-//    struct node * find_file;
-//    struct node * current_file;
-//    if (searchFileNode(pathname, storage, &find_file) == 0) {
-//        printf("search file FOUND\n");
-//        printf("is open : %d\n", find_file->fdClient_id);
-//        if (find_file->fdClient_id != -1) {
-//            while (find_file->fdClient_id != 1) {
-//                printf("waiting...\n");
-//                sleep(1);
-//            }
-//        }
-//        removeFile(&find_file, pathname_removed, storage, &current_file, &(*nf));
-//        return 0;
-//    }
-//    return -1;
-//}
-
-
-int printStorage(info_storage_t ** storage) {
-    // Dice cosa contiene lo storage
-#if TEST_LOCK == 1
-    printf("printStorage LOCK\n");
-#endif
-    pthread_mutex_lock(&(*storage)->lock);
-    printf("+++++++++++++++++++++++++++++\n");
+// print all pathname of file in the storage and size
+void printStorage(info_storage_t ** storage, FILE * logfile) {
+    LOCK(&(*storage)->lock, )
+    fprintf(logfile, "************************************************************\n");
+    fprintf(logfile, "******                    STORAGE                     ******\n");
+    fprintf(logfile, "************************************************************\n\n");
     struct node * current = (*storage)->head;
     while(current != NULL) {
-        printf("info : %s\nfd_id : %d\n", (current)->pathname, (current)->fdClient_id);
+        fprintf(logfile, "Info : %s\nSize : %ld\n", (current)->pathname, (current)->file_sz);
         current = (current)->son;
     }
-    printf("+++++++++++++++++++++++++++++\n");
-#if TEST_LOCK == 1
-    printf("printStorage UNLOCK\n");
-#endif
-    pthread_mutex_unlock(&(*storage)->lock);
-    return 0;
+    fprintf(logfile, "\n************************************************************\n");
+    UNLOCK(&(*storage)->lock, )
 }
 
-
-int freerStorage(info_storage_t ** storage) {
-    // libero la memoria --------- FUNZIONE da DEFINIRE
-#if TEST_LOCK == 1
-    printf("freerStorage LOCK\n");
-#endif
-    pthread_mutex_lock(&(*storage)->lock);
+// clears the entire storage
+void freerStorage(info_storage_t ** storage) {
+    LOCK(&(*storage)->lock, )
     long nb_file_check = (*storage)->nfile_tot-(*storage)->nfile_dispo;
-
     struct node * current = (*storage)->head;
-    while (nb_file_check != 0) {
-        struct node * tmp = current;
+    struct node * tmp;
+    while (current != NULL) {
+        tmp = current;
         current = current->son;
+        free(tmp->content_file);
         free(tmp);
-        printf("file free : %ld\n", nb_file_check);
+        fprintf(stderr, "file free : %ld\n", nb_file_check);
         nb_file_check -= 1;
     }
+    UNLOCK(&(*storage)->lock, )
     free(*storage);
-#if TEST_LOCK == 1
-    printf("freerStorage UNLOCK\n");
-#endif
-    pthread_mutex_unlock(&(*storage)->lock);
-    return 0;
 }

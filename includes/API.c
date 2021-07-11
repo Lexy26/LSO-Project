@@ -39,7 +39,7 @@ int simple_opneConnection(const char *sockname, int msec, int maxtime) {
             if (maxtime > 0) sleep(msec/1000);
         } else {
             //stampa valore del timer
-            printf("client connesso\n");
+            fprintf(stderr, "client connesso\n");
             return fd_c;
         }
     }
@@ -55,7 +55,6 @@ int closeConnection(const char *sockname) {
     int check_int = (int) strtol((char*) check_str,  NULL, 10);
     free(check_str);
     close(fd_c);
-    printf("socket chiuso\n");
     return check_int;
 }
 
@@ -101,9 +100,6 @@ int readNFiles(int N, const char* dirname) {
     sprintf(n, "%d", N);
     sendMsg(fd_c, api_id, n, NULL);
     // loop that wait to receive n file or more
-    printf("\n------------------------------------------------------\n");
-    printf("-                      FILE READ                     -\n");
-    printf("------------------------------------------------------\n\n");
     while (1) {
         unsigned char * sms_content;
         char * path;
@@ -111,7 +107,7 @@ int readNFiles(int N, const char* dirname) {
         int check;
         receivedMsg_File_Content(&path, &sms_content, &size_buf, &check, fd_c);
         if (path != NULL) {
-            printf("- %s\n", path);
+            fprintf(stderr, "File : %s\nSize : %zu\n", path, size_buf);
         }
         if (dirname != NULL && check == 1) {
             // insert file in directory
@@ -128,11 +124,9 @@ int readNFiles(int N, const char* dirname) {
             fclose(f);
             free(sms_content);
         } else if (check == 0){// there is no more file o read
-            printf("------------------------------------------------------\n\n");
             return 0;
         } else if(check == -1) { //there is a problem when rreading file
             // settare errno ooprtunamente con una macro
-            printf("------------------------------------------------------\n\n");
             return -1;
         }
         //free(path);
