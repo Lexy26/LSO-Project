@@ -52,13 +52,14 @@ int main(int argc, char *argv[]) {
     // Create logfile to save internal operations of server
     FILE * logfile;
     CHECK_EXIT_VAR("fopen logfile", logfile,fopen(cfg->LOGFILE, "w"), NULL)
-    fprintf(logfile, "------------------------------------------------\n");
-    fprintf(logfile, "-          Internal Server Operations          -\n");
-    fprintf(logfile, "------------------------------------------------\n\n");
+    fprintf(logfile, "------------------------------------------------------------\n");
+    fprintf(logfile, "-                Internal Server Operations                -\n");
+    fprintf(logfile, "------------------------------------------------------------\n\n");
 
     // create STORAGE
     info_storage_t *storage;
-    CHECK_EXIT_VAR("calloc storage", storage, calloc(1, sizeof(info_storage_t)), NULL)
+    CHECK_EXIT_VAR("malloc storage", storage, malloc(sizeof(info_storage_t)), NULL)
+    memset(storage, 0, sizeof(info_storage_t));
     storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
     // create QUEUE Request
@@ -72,14 +73,19 @@ int main(int argc, char *argv[]) {
     sigaddset(&set_signal, SIGQUIT);
     sigaddset(&set_signal, SIGHUP);
     CHECK_NEQ_EXIT("pthread_sigmask", pthread_sigmask(SIG_BLOCK, &set_signal, NULL), 0)
-    // pipe for signal soft close
-    int pipe_sig[2];
-    CHECK_NEQ_EXIT("pipe signal", pipe(pipe_sig), 0)
+    // pipe for signals
+    int pipe_sighup[2];
+    CHECK_NEQ_EXIT("pipe signal", pipe(pipe_sighup), 0)
+    int pipe_sigint_sigquit[2];
+    CHECK_NEQ_EXIT("pipe signal", pipe(pipe_sigint_sigquit), 0)
+
     // Create Signal Thread Worker
-    signalHandler_t * signalHandler = malloc(sizeof(signalHandler_t));
+    signalHandler_t * signalHandler;
+    CHECK_EXIT_VAR("malloc signal Handler", signalHandler, malloc(sizeof(signalHandler_t)), NULL)
     memset(signalHandler, 0, sizeof(signalHandler_t));
     signalHandler->set_sig = &set_signal;
-    signalHandler->pipe = pipe_sig[1];
+    signalHandler->pipe_hup = pipe_sighup[1];
+    signalHandler->pipe_int_quit = pipe_sigint_sigquit[1];
     pthread_t signal_thread;
     CHECK_NEQ_EXIT("pthread_create signal", pthread_create(&signal_thread, NULL, threadSignal, signalHandler), 0)
 
@@ -112,9 +118,11 @@ int main(int argc, char *argv[]) {
     FD_ZERO(&tmpset);
     FD_SET(fd_server, &set);// fd for new connection
     FD_SET(pipe_fd[0], &set);
-    FD_SET(pipe_sig[0], &set);
+    FD_SET(pipe_sighup[0], &set);
+    FD_SET(pipe_sigint_sigquit[0], &set);
     if (pipe_fd[0] > fd_max) fd_max = pipe_fd[0];
-    if (pipe_sig[0] > fd_max) fd_max = pipe_sig[0];
+    if (pipe_sighup[0] > fd_max) fd_max = pipe_sighup[0];
+    if (pipe_sigint_sigquit[0] > fd_max) fd_max = pipe_sigint_sigquit[0];
     // set global statistic
     CHECK_EXIT_VAR("malloc statistics", statistics, malloc(sizeof(statistics_t)), NULL)
     memset(statistics, 0, sizeof(statistics_t));
@@ -124,7 +132,7 @@ int main(int argc, char *argv[]) {
     // life cycle of server
     while (1) {
         if (sigINT_sigQUIT == 1) {
-            LOG_PRINT(logfile, "SIGINT o SIGQUIT catched")
+            LOG_PRINT(logfile, "Server Shutdown...")
             break;
         }
         // when SIGHUP is catched and there is no client connection
@@ -153,8 +161,13 @@ int main(int argc, char *argv[]) {
                         LOG_PRINT2_INT(logfile, "client fd reactivated : ",fd_buf)
                         FD_SET(fd_buf, &set);
                         if (fd_buf > fd_max) fd_max = fd_buf;
+                    } else if (fd == pipe_sigint_sigquit[0]) {
+                        if (sigINT_sigQUIT == 0) {
+                            LOG_PRINT(logfile, "SIGINT or SIGQUIT catched")
+                            sigINT_sigQUIT = 1;
+                        }
                     }
-                    else if (fd == pipe_sig[0]) {
+                    else if (fd == pipe_sighup[0]) {
                         if (sigHUP == 0) {
                             LOG_PRINT(logfile, "SIGHUP catched")
                             sigHUP = 1;
@@ -212,16 +225,23 @@ int main(int argc, char *argv[]) {
     fprintf(logfile, "Max size reached by storage    : %.6f Mbytes\n", mem_used);
     fprintf(logfile, "Max number of file in storage  : %ld\n", statistics->max_nfile);
     fprintf(logfile, "Number of file removed         : %d\n", statistics->cnt_file_removed);
-    printStorage(&storage);
     fprintf(logfile, "\n------------------------------------------------------------\n");
-
+    printStorage(&storage, logfile);
+    fprintf(stderr, "Server close\n");
 
     // close and free all
     // MANCA ROBA
+    freerStorage(&storage);
     close(fd_server);
     fclose(logfile);
+    close(pipe_sigint_sigquit[1]);
+    close(pipe_sighup[1]);
+    close(pipe_fd[1]);
+    close(pipe_fd[0]);
+    free(queue);
+//    free(storage);
+    free(signalHandler);
     free(statistics);
-    free(storage);
     free(cfg->SOCKNAME);
     free(cfg->LOGFILE);
     free(cfg);
