@@ -1,32 +1,22 @@
 
-//#define _POSIX_C_SOURCE 199309L
 #include <string.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <sys/select.h>
-#include <unistd.h>
-#include <time.h>
+
 
 
 #include "util_client.h"
 #include "API.h"
 
-#define T_REQUEST 50// num max of client request
 
 char *realpath(const char *path, char *resolved_path);
 
 
 
-// is the interruption time between requests
-void timer(int time) {
-    struct timeval tv;
-    tv.tv_sec  = time / 1000;
-    tv.tv_usec = (time % 1000) * 1000;
-    select (0, NULL, NULL, NULL, &tv);
-}
+
 
 /*!
  * initLstRequest : initialise list of client requests
@@ -34,8 +24,8 @@ void timer(int time) {
  */
 void initLstRequest(nb_request ** lst_request) {
     CHECK_EXIT_VAR("calloc initLstRequest lst_request", *lst_request, calloc(1, sizeof(nb_request)),NULL)// spazio suff. per freeare char_abc + msg
-    CHECK_EXIT_VAR("calloc initLstRequest list", (*lst_request)->lst_char_abc, calloc(T_REQUEST, sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
-    memset((*lst_request)->lst_char_abc, 0, T_REQUEST* sizeof(command_t));
+    CHECK_EXIT_VAR("calloc initLstRequest list", (*lst_request)->lst_char_abc, calloc(1,sizeof(command_t)),NULL)// spazio suff. per freeare char_abc + msg
+    memset((*lst_request)->lst_char_abc, 0, sizeof(command_t));
     (*lst_request)->char_f = NULL;
     (*lst_request)->char_h = 0;
     (*lst_request)->char_p = 0;
@@ -57,6 +47,8 @@ void createRequest(char *ptarg, char *dirname, char option[2], nb_request ** pRe
     (char_abc)->dirname = dirname;
     strncpy((char_abc)->option, option, 2);
     int i = *index;
+    CHECK_EXIT_VAR("realloc", (*pRequest)->lst_char_abc, realloc((*pRequest)->lst_char_abc, (i+1)* sizeof((*pRequest)->lst_char_abc)), NULL)
+
     (*pRequest)->lst_char_abc[i] = &(*char_abc);
     ++(*pRequest)->tot_request;
     *index += 1;
@@ -69,7 +61,6 @@ void createRequest(char *ptarg, char *dirname, char option[2], nb_request ** pRe
  */
 void freer(command_t **lst, size_t sz) {
     for (int i = 0; i < sz; ++i) {
-        //free(lst[i]->param);
         free(lst[i]);
     }
     free(lst);

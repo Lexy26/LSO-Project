@@ -11,6 +11,8 @@ typedef struct {
     char * LOGFILE; // file di log
 } config_t;
 
+
+
 void configuration(int argc,char *argv[],config_t **cfg);
 
 

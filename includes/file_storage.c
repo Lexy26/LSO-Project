@@ -9,8 +9,6 @@
 #include "util.h"
 #include "file_storage.h"
 
-#define TEST_LOCK 0
-
 
 /*!
  * createFileNode : initialise file node structure
@@ -42,6 +40,7 @@ struct node *createFileNode(char * name, int fd) {
 info_storage_t *createStorage(long ram, long nfile) {
     info_storage_t *storage_init;
     CHECK_EXIT_VAR("calloc storage init", storage_init, calloc(1, sizeof(info_storage_t)), NULL)
+    memset(storage_init, 0, sizeof(info_storage_t));
 
     storage_init->head = NULL;
     storage_init->last = NULL;
@@ -65,8 +64,8 @@ info_storage_t *createStorage(long ram, long nfile) {
  * @param nfile_removed : if file removed, increase the variable by one
  * @return              : file removed (0) | file not removed (-1)
  */
-int removeFile(struct node **file_remove, char ** rm_path, info_storage_t **storage, struct node ** current_file, int * nfile_removed) {
-    if ((*file_remove)->fdClient_id == -1) {
+int removeFile(struct node **file_remove, char ** rm_path, info_storage_t **storage, struct node ** current_file, int * nfile_removed, FILE * logfile) {
+    if ((*file_remove)->fdClient_id == -1 && (*file_remove)->modified == 1) {
         fprintf(stderr, "Rimozione in corso ... : %s\n", (*file_remove)->pathname);
         (*nfile_removed) += 1;
         struct node *tmp = (*file_remove);
@@ -95,6 +94,7 @@ int removeFile(struct node **file_remove, char ** rm_path, info_storage_t **stor
                 *current_file = (*file_remove)->father;
             }
         }
+        fprintf(logfile, "FILE RIMOSSI ==== %s ====\n", tmp->pathname);
         CHECK_EXIT_VAR("realloc rm_path", *rm_path, realloc(*rm_path, strlen(*rm_path) + strlen((tmp)->pathname)+2), NULL)
         strncat(*rm_path, ",", 2);
         strncat(*rm_path, (tmp)->pathname, strlen((tmp)->pathname));
@@ -143,7 +143,7 @@ int searchFileNode(char * pathname, info_storage_t ** storage, struct node ** fi
  * @param nfile_removed  : if file removed, increase the variable by one
  * @return               : insert (0) | not insert (-1)
  */
-int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int * nfile_removed) {
+int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int * nfile_removed, FILE * logfile) {
     if ((*storage)->nfile_dispo <= 0) {
         int cnt = 0;
         struct node *current_file = (*storage)->last;
@@ -154,9 +154,10 @@ int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, ch
             current_file = (*storage)->last;
             while (current_file != NULL && (*storage)->nfile_dispo <= 0) {
                 LOCK(&(*storage)->lock, -1)
-                if (removeFile(&(current_file), &(*buf_rm_path), &(*storage), &current_ptr, &(*nfile_removed))) {
+                if (removeFile(&(current_file), &(*buf_rm_path), &(*storage), &current_ptr, &(*nfile_removed), logfile)) {
                     current_file = (current_file)->father;
                 } else {
+
                     current_file = current_ptr;
                 }
                 UNLOCK(&(*storage)->lock, -1)
@@ -197,13 +198,14 @@ int insertCreateFile(struct node ** node_to_insert, info_storage_t **storage, ch
  * @param nfile_removed  : if file removed, increase the variable by one
  * @return               : update done (0) | update error (-1)
  */
-int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content, int * nfile_removed) { // First in Last out
+int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** buf_rm_path, int fd_current, long size_buf, unsigned char * content, int * nfile_removed, FILE * logfile) { // First in Last out
     // if file size is bigger than the global size of storage, delete file itself
     if((*storage)->ram_tot - size_buf < 0 && (*node_to_insert)->modified ==-1) {
         struct node *notused;
         LOCK(&(*storage)->lock, -1)
         (*node_to_insert)->fdClient_id = -1;
-        removeFile(&(*node_to_insert), &(*buf_rm_path), &(*storage), &notused, &(*nfile_removed));
+        (*node_to_insert)->modified = 1;
+        removeFile(&(*node_to_insert), &(*buf_rm_path), &(*storage), &notused, &(*nfile_removed), logfile);
         UNLOCK(&(*storage)->lock, -1)
         return -1;
     }
@@ -217,7 +219,7 @@ int UpdateFile(struct node ** node_to_insert, info_storage_t **storage, char ** 
             is_removable = (*storage)->last;
             while (is_removable != NULL && ((*storage)->ram_dispo - size_buf < 0)) {
                 LOCK(&(*storage)->lock, -1)
-                if (removeFile(&(is_removable), &(*buf_rm_path), &(*storage), &(current_file), &(*nfile_removed)) == -1) {
+                if (removeFile(&(is_removable), &(*buf_rm_path), &(*storage), &(current_file), &(*nfile_removed), logfile) == -1) {
                     // if the current file is open from another client, check next file
                     is_removable = (is_removable)->father;
                 }
@@ -277,7 +279,6 @@ void freerStorage(info_storage_t ** storage) {
         current = current->son;
         free(tmp->content_file);
         free(tmp);
-        fprintf(stderr, "file free : %ld\n", nb_file_check);
         nb_file_check -= 1;
     }
     UNLOCK(&(*storage)->lock, )

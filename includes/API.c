@@ -1,7 +1,6 @@
 /*      ------      API      ------      */
 
 #define _POSIX_C_SOURCE  200112L
-#include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
@@ -10,39 +9,38 @@
 #include <stdio.h>
 #include <libgen.h>
 #include <unistd.h>
-
+#include <sys/time.h>
+#include <sys/stat.h>
 
 #include "util.h"
 #include "API.h"
 
-#define test 0
-
 int fd_c;
 
-//static inline int openConnection(const char *sockname, int msec, const struct timespec abstime);
 
-//         versione semplificata della openConnection()
-int simple_opneConnection(const char *sockname, int msec, int maxtime) {
+int openConnection(const char *sockname, int msec, const struct timespec abstime) {
+    struct timespec abs_time = abstime;
     CHECK_EXIT_VAR("socket", fd_c, socket(AF_UNIX, SOCK_STREAM, 0), -1)
     struct sockaddr_un serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sun_family = AF_UNIX;
     strncpy(serv_addr.sun_path, sockname, strlen(sockname) + 1);
-    while (maxtime) { // ciclo con maxtime limite per aspettare una connessione col server
-        // check del timer
-        errno = 0;
-        int connected;
-        CHECK_RETURN("connect", connected, connect(fd_c, (struct sockaddr *) &serv_addr, sizeof(serv_addr)), -1)
-        if (errno == ENOENT) {
-            printf("waiting ...\n");
-            maxtime--;
-            if (maxtime > 0) sleep(msec/1000);
-        } else {
-            //stampa valore del timer
-            fprintf(stderr, "client connesso\n");
-            return fd_c;
+    if (msec < abstime.tv_nsec) {
+        // check the connection every msec until the abstime is up
+        while (abs_time.tv_nsec>0) {
+            errno = 0;
+            CHECK_EQ_EXIT("connect", connect(fd_c, (struct sockaddr *) &serv_addr, sizeof(serv_addr)), -1)
+            if (errno == ENOENT) {
+                fprintf(stderr, "waiting for Connection ...\n");
+                abs_time.tv_nsec -= msec;
+                timer(msec);
+            } else {
+                fprintf(stderr, "client connected\n");
+                return 0;
+            }
         }
     }
+    errno=ECONNREFUSED;
     return -1;
 }
 
@@ -73,7 +71,21 @@ int openFile(const char *pathname, int flags) { // O_CREATE = 1 || O_OPEN = 0
     }
     unsigned char * sms_read;
     recievedMsg(&sms_read, fd_c);
+    char * tmp;
+    char * token = strtok_r((char *)sms_read, ",", &tmp);
     int check_int = (int) strtol((char *) sms_read, NULL, 10);
+    token = strtok_r(NULL, ",", &tmp);
+    if(token != NULL) {
+        fprintf(stderr,"^\n");
+        fprintf(stderr,"|\n");
+        fprintf(stderr, "------------------------------------------------------\n");
+        fprintf(stderr, "---                  FILE ESPULSI                  ---\n");
+        fprintf(stderr, "------------------------------------------------------\n");
+        while (token) {
+            fprintf(stderr, " - %s\n", token);
+            token = strtok_r(NULL, ",", &tmp);
+        }
+        fprintf(stderr, "------------------------------------------------------\n\n");}
     free(sms_read);
     return (int) check_int;
 }
@@ -88,7 +100,7 @@ int readFile(const char *pathname, void ** buf, size_t * size) {
     if (check == 0 || check == 1) {
         return 0;
     } else {
-        // settare errno
+        errno=EPERM;
         return -1;
     }
 }
@@ -99,6 +111,14 @@ int readNFiles(int N, const char* dirname) {
     char n[BUFSIZE];
     sprintf(n, "%d", N);
     sendMsg(fd_c, api_id, n, NULL);
+    struct stat st;
+    int is_dir = 1;
+    if (dirname != NULL) {
+        if (stat(dirname, &st) == -1 || !S_ISDIR(st.st_mode)) {
+            fprintf(stderr, "Directory [%s] doesn't exist.\nCan't save files read.\n", dirname);
+            is_dir = 0;
+        }
+    }
     // loop that wait to receive n file or more
     while (1) {
         unsigned char * sms_content;
@@ -109,7 +129,7 @@ int readNFiles(int N, const char* dirname) {
         if (path != NULL) {
             fprintf(stderr, "File : %s\nSize : %zu\n", path, size_buf);
         }
-        if (dirname != NULL && check == 1) {
+        if (dirname != NULL && check == 1 && is_dir == 1) {
             // insert file in directory
             char *base = basename(path);
             char * filename;
@@ -122,14 +142,15 @@ int readNFiles(int N, const char* dirname) {
             CHECK_EXIT_VAR("fopen dirname", f, fopen(filename, "wb"), NULL)
             CHECK_EQ_EXIT("fwrite f", fwrite(sms_content, size_buf, 1, f), -1)
             fclose(f);
-            free(sms_content);
+            free(filename);
         } else if (check == 0){// there is no more file o read
             return 0;
         } else if(check == -1) { //there is a problem when rreading file
-            // settare errno ooprtunamente con una macro
+            errno=EPERM;
             return -1;
         }
-        //free(path);
+        if(sms_content != NULL) free(sms_content);
+
     }
 }
 
@@ -148,18 +169,23 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     if (check == 0) {
         // check if there are no file removed
         token = strtok_r(NULL, ",", &tmp);
+
         if(token != NULL) {
-            printf("\n------------------------------------------------------\n");
-            printf("-                    FILE ESPULSI                    -\n");
-            printf("------------------------------------------------------\n\n");
+            fprintf(stderr,"/ \\ \n");
+            fprintf(stderr," |\n");
+            fprintf(stderr," |\n");
+            fprintf(stderr, "\n------------------------------------------------------\n");
+            fprintf(stderr, "---                  FILE ESPULSI                  ---\n");
+            fprintf(stderr, "------------------------------------------------------\n\n");
             while (token) {
-                printf(" - %s\n", token);
+                fprintf(stderr," - %s\n", token);
                 token = strtok_r(NULL, ",", &tmp);
             }
-            printf("\n------------------------------------------------------\n\n");
+            fprintf(stderr, "\n------------------------------------------------------\n\n");
         }
     } else {
         free(sms_recieved);
+        errno=EPERM;
         return -1;
     }
     free(sms_recieved);
@@ -174,8 +200,8 @@ int closeFile(const char * pathname) {
     recievedMsg(&sms, fd_c);
     size_t check = strtol((char *) sms, NULL, 10);
     if (check == -1) {
-        // settare errno opportumanete
         free(sms);
+        errno=EPERM;
         return -1;
     }
     free(sms);

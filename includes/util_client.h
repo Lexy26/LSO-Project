@@ -4,6 +4,22 @@
 #define UTIL_CLIENT_H
 
 #include "util.h"
+// structure for command information
+typedef struct {
+    char option[2]; // operation type
+    char *param; // optarg, what comes after the opt
+    char * dirname; // useful only with -r and -R
+} command_t;
+
+// structure to list requests
+typedef struct {
+    int tot_request; // total number of requests (without -t, -h, -p, -f)
+    int char_t; // time command
+    int char_h; // help command
+    int char_p; // print command
+    char* char_f; // socket name for connection
+    command_t ** lst_char_abc; // array of all requests
+}nb_request;
 
 void timer(int time);
 

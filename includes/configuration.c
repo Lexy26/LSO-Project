@@ -4,14 +4,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <limits.h>
 
 #include <getopt.h>
 
 #include "configuration.h"
-#include "util.h"
 
 #define BUF_SIZE 256
+
+char *strndup(const char *s, size_t n);
+
 
 /*!
  * configuration : This function reads the configuration file and extracts information
@@ -19,13 +20,18 @@
  */
 void configuration(int argc,char *argv[],config_t **cfg){
     if (argc != 3) {
-        fprintf(stderr,"Use: ./server -F <fileConfig.txt>\n");
+        fprintf(stderr,"Usage: ./server -F <fileConfig.txt>\n");
         exit(EXIT_FAILURE);
     }
     FILE * config;
     config = NULL;
     int opt;
     opterr = 0;
+    (*cfg)->LOGFILE = NULL;
+    (*cfg)->SOCKNAME = NULL;
+    (*cfg)->N_THREAD = 0;
+    (*cfg)->N_FILE = 0;
+    (*cfg)->MEM_SIZE = 0;
     if ((opt = getopt(argc, argv, "F:")) != -1) {
         if (opt == 'F') {
             if ((config = fopen(optarg, "r")) == NULL) {
@@ -77,7 +83,7 @@ void configuration(int argc,char *argv[],config_t **cfg){
             token = strtok_r(NULL, " ", &tmp);
             long number = strtol(token, &correct, 10);
             if (correct != NULL && *correct == (char) 0) {
-                if(number < 512) {
+                if(number < 1) {
                     fprintf(stderr,"MEM_SIZE convertion error\n");
                     fprintf(stderr,"server starting with MEM_SIZE=128000 default variable\n");
                     (*cfg)->MEM_SIZE = 128000;
@@ -87,31 +93,54 @@ void configuration(int argc,char *argv[],config_t **cfg){
                 fprintf(stderr,"server starting with MEM_SIZE=128000 default variable\n");
                 (*cfg)->MEM_SIZE = 128000;
             }
+
+
         } else if (strncmp(token, "SOCKNAME", strlen("SOCKNAME")) == 0) {
             token = strtok_r(NULL, " ", &tmp);
             if(token == NULL || strncmp(&token[0], "#", 1)==0){
                 fprintf(stderr,"SOCKNAME convertion error\n");
                 fprintf(stderr,"server starting with SOCKNAME=./cs_sock default variable\n");
-                (*cfg)->SOCKNAME = "./cs_sock";
+                (*cfg)->SOCKNAME = strndup( "./cs_sock", strlen("./cs_sock"));
+            } else {
+                (*cfg)->SOCKNAME = strndup(token, strlen(token));
             }
-            CHECK_EXIT_VAR("malloc sockname", (*cfg)->SOCKNAME, malloc(strlen(token)+1), NULL)
-            memset((*cfg)->SOCKNAME, '\0', strlen(token)+1);
-            strncpy((*cfg)->SOCKNAME, token, strlen(token)+1);
+
+
         } else if (strncmp(token, "LOGFILE", strlen("LOGFILE")) == 0) {
             token = strtok_r(NULL, " ", &tmp);
             if(token == NULL || strncmp(&token[0], "#", 1)==0){
                 fprintf(stderr,"LOGFILE convertion error\n");
-                fprintf(stderr,"server starting with LOGFILE=logfile default variable\n");
-                (*cfg)->LOGFILE = "logfile";
+                fprintf(stderr,"server starting with LOGFILE=logfile.txt default variable\n");
+                (*cfg)->LOGFILE = strndup( "logfile.txt", strlen("logfile.txt"));
+            } else {
+                (*cfg)->LOGFILE = strndup( token, strlen(token));
             }
-            CHECK_EXIT_VAR("malloc logfile", (*cfg)->LOGFILE, malloc(strlen(token)+1), NULL)
-            memset((*cfg)->LOGFILE, '\0', strlen(token)+1);
-            strncpy((*cfg)->LOGFILE, token, strlen(token)+1);
         }
-        else {// if config file format is not correct
-            fprintf(stderr,"format config file error\n");
-            fprintf(stderr, "Value of errno: %d\n", errno);
-        }
+    }
+    if((*cfg)->N_FILE == 0) {
+        fprintf(stderr,"N_FILE convertion error\n");
+        fprintf(stderr,"server starting with N_FILE=50 default variable\n");
+        (*cfg)->N_FILE = 50;
+    }
+    if ((*cfg)->N_THREAD == 0) {
+        fprintf(stderr,"N_THREAD convertion error\n");
+        fprintf(stderr,"server starting with N_THREAD=1 default variable\n");
+        (*cfg)->N_THREAD = 1;
+    }
+    if ((*cfg)->MEM_SIZE == 0) {
+        fprintf(stderr,"MEM_SIZE convertion error\n");
+        fprintf(stderr,"server starting with MEM_SIZE=128000 default variable\n");
+        (*cfg)->MEM_SIZE = 128000;
+    }
+    if ((*cfg)->LOGFILE == NULL) {
+        fprintf(stderr,"LOGFILE convertion error\n");
+        fprintf(stderr,"server starting with LOGFILE=logfile.txt default variable\n");
+        (*cfg)->LOGFILE = strndup( "logfile.txt", strlen("logfile.txt"));
+    }
+    if ((*cfg)->SOCKNAME == NULL) {
+        fprintf(stderr,"SOCKNAME convertion error\n");
+        fprintf(stderr,"server starting with SOCKNAME=./cs_sock default variable\n");
+        (*cfg)->SOCKNAME = strndup( "./cs_sock", strlen("./cs_sock"));
     }
     fclose(config);
 }

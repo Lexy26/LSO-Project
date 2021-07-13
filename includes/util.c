@@ -4,12 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "util.h"
 #include "conn.h"
+
 
 // ------  GENERAL STRUCTURE OF MESSAGE  ------ //
 
@@ -99,11 +99,12 @@ void sendMsg(int fd_c, char api_id[3], char *arg1, char *arg2) {
  * @param sms_content : content of file
  * @param size_buf    : size of content to read
  * @param check       : see if file to read exist (1), there is no file (-1) or no need to read other file (0)
- * @param fd_c
+ * @param fd_c        : client fd
  */
 void receivedMsg_File_Content(char ** pathname, unsigned char** sms_content, size_t *size_buf,int * check, int fd_c){
     unsigned char * sms_info;
     recievedMsg(&sms_info, fd_c);
+//    unsigned char * tmp_sms = sms_info;
     char * tmp;
     char * token = strtok_r((char *)sms_info, ",", &tmp); // token = check
     if (strncmp(token, "1", 1)==0) { // there is a file to read
@@ -132,14 +133,12 @@ void receivedMsg_File_Content(char ** pathname, unsigned char** sms_content, siz
         *check = -1;
         *pathname = NULL;
     }
-    //free(sms_info);
-
 }
 
 /*!
  * recievedMsg: received message info
  * @param sms_info : useful information for client or server
- * @param fd_c
+ * @param fd_c : client fd
  */
 void recievedMsg(unsigned char ** sms_info, int fd_c) {
     msg_t *sms_read;
@@ -152,4 +151,11 @@ void recievedMsg(unsigned char ** sms_info, int fd_c) {
     free(sms_read);
 }
 
+// is the interruption time between requests
+void timer(int time) {
+    struct timeval tv;
+    tv.tv_sec  = time / 1000;
+    tv.tv_usec = (time % 1000) * 1000;
+    CHECK_EQ_EXIT("select",select (0, NULL, NULL, NULL, &tv), -1)
 
+}

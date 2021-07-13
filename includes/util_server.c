@@ -165,11 +165,15 @@ void* threadF(void* args) {
         } else if (request->api_id == 2){
             // ------------------ OPEN FILE ------------------
             char * tmp;
+
             char * token = strtok_r(request->sms_info, ",",&tmp); // token = pathname || tmp = flag
+            fprintf(request->logfile, "OPEN FILE ==== %s ====\n", token);
             char * pathfile = token;
             struct node * file;
             int create = searchFileNode(token, &(*request->storage), &file);
-
+            char * buf_rm_path;
+            CHECK_EXIT_VAR("malloc buf_rm_path", buf_rm_path, malloc(sizeof(char)), NULL)
+            memset(buf_rm_path, 0, sizeof(char));
             token = strtok_r(NULL, ",", &tmp);
             if ((create != -1 && strncmp(token, "1", 1) == 0) || (create == -1 && strncmp(token, "0", 1) == 0)) {
                 sms_write->len = strlen("-1"); // error
@@ -178,16 +182,14 @@ void* threadF(void* args) {
                 // this file doesn't exist storage, so create file node
                 if (create == -1) {
                     // variable where there are files removed
-                    char * buf_rm_path;
-                    CHECK_EXIT_VAR("malloc buf_rm_path", buf_rm_path, malloc(sizeof(char)), NULL)
-                    memset(buf_rm_path, 0, sizeof(char));
+
                     file = createFileNode(pathfile, request->fd_client_id);
-                    if (insertCreateFile(&file, &(*request->storage), &buf_rm_path, &statistics->cnt_file_removed)) {
+                    if (insertCreateFile(&file, &(*request->storage), &buf_rm_path, &statistics->cnt_file_removed, request->logfile)) {
                         sms_write->len = strlen("-1"); // error
                         sms_write->str = (unsigned char *) strndup("-1", strlen("-1"));
                     } else {
                         // prepare sms with removed files if any
-                        sms_write->len = strlen("0");
+                        sms_write->len = strlen("0")+1;
                         if (buf_rm_path != NULL) {
                             sms_write->len += strlen(buf_rm_path)+1;
                         }
@@ -196,7 +198,7 @@ void* threadF(void* args) {
                         if (buf_rm_path != NULL) {
                             strncat((char *) sms_write->str, buf_rm_path, strlen(buf_rm_path));
                         }
-                        free(buf_rm_path);
+
                     }
                 } else {
                     // if file exist, only modify the var. fd_client_id to indicate that this file is open
@@ -222,15 +224,16 @@ void* threadF(void* args) {
                     }
                 }
             }
-            fprintf(stderr, "FINISH OPEN FILE\n");
             CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
             CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
-
+            free(buf_rm_path);
         } else if (request->api_id == 3){
             // ------------------ READ FILE ------------------
             char * tmp;
             char * token = strtok_r(request->sms_info, ",",&tmp);
             struct node* file_read;
+            fprintf(request->logfile, "READ FILE ==== %s ====\n", token);
+
             if (searchFileNode(token, &(*request->storage), &file_read) == -1) {
                 // if the file is not found
                 sms_write->len = strlen("-1"); // error
@@ -259,7 +262,6 @@ void* threadF(void* args) {
                 }
                 UNLOCK(&(*request->storage)->lock, NULL)
             }
-            fprintf(stderr, "FINISH READ FILE\n");
 
 
         } else if (request->api_id == 4){
@@ -279,6 +281,7 @@ void* threadF(void* args) {
                     current = current->son;
                 } else {
                     // file available to be read
+                    fprintf(request->logfile, "READ N FILE ==== %s ====\n", current->pathname);
                     char size_char[BUFSIZE];
                     sprintf(size_char, "%ld", current->file_sz);
                     sendMsg_File_Content(request->fd_client_id,"1,",current->pathname, size_char, current->content_file);
@@ -290,18 +293,17 @@ void* threadF(void* args) {
             }
             if (n_read == check) {
                 // no file has been read
-                fprintf(stderr, "Nessuna lettura file\n");
+//                fprintf(stderr, "Nessuna lettura file\n");
                 sms_write->len = strlen("-1"); // error
                 sms_write->str = (unsigned char *) strndup("-1", strlen("-1"));
             } else {
                 // all requested files have been read
-                fprintf(stderr, "ciclo finito\n");
+//                fprintf(stderr, "ciclo finito\n");
                 sms_write->len = strlen("0"); // error
                 sms_write->str = (unsigned char *) strndup("0", strlen("0"));
             }
             CHECK_EQ_EXIT("write openfile size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
             CHECK_EQ_EXIT("write openfile sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
-            fprintf(stderr, "FINISH READ N FILE\n");
 
 
         } else if (request->api_id == 5){
@@ -309,6 +311,9 @@ void* threadF(void* args) {
             char * tmp;
             char * token = strtok_r(request->sms_info, ",",&tmp); // token = pathname
             struct node * file_node;
+            char * buf_rm_path;
+            CHECK_EXIT_VAR("malloc buf_rm_path", buf_rm_path, malloc(sizeof(char)), NULL)
+            memset(buf_rm_path, 0, sizeof(char));
             // search file in storage
             if (searchFileNode(token, &(*request->storage), &file_node) == -1) {
                 sms_write->len = strlen("-1"); // error
@@ -326,17 +331,16 @@ void* threadF(void* args) {
                     sms_write->str = (unsigned char *) strndup("-1", strlen("-1"));
                     UNLOCK(&(*request->storage)->lock, NULL)
                 } else {
-                    char * buf_rm_path;
-                    CHECK_EXIT_VAR("malloc buf_rm_path", buf_rm_path, malloc(sizeof(char)), NULL)
-                    memset(buf_rm_path, 0, sizeof(char));
+                    fprintf(request->logfile, "APPEND TO FILE ==== %s ====\n", file_node->pathname);
+
                     UNLOCK(&(*request->storage)->lock, NULL)
                     // insert new file in storage
-                    if (UpdateFile(&file_node, &(*request->storage), &buf_rm_path, request->fd_client_id, request->size_buf, request->sms_content, &statistics->cnt_file_removed) == -1) {
+                    if (UpdateFile(&file_node, request->storage, &buf_rm_path, request->fd_client_id, request->size_buf, request->sms_content, &(statistics->cnt_file_removed), request->logfile) == -1) {
                         sms_write->len = strlen("-1"); // error
                         sms_write->str = (unsigned char *) strndup("-1", strlen("-1"));
                     } else {
                         // prepare sms with removed files if any
-                        sms_write->len = strlen("0");
+                        sms_write->len = strlen("0")+1;
                         if (buf_rm_path != NULL) {
                             sms_write->len += strlen(buf_rm_path)+1;
                         }
@@ -345,9 +349,8 @@ void* threadF(void* args) {
                         if (buf_rm_path != NULL) {
                             strncat((char *) sms_write->str, buf_rm_path, strlen(buf_rm_path));
                         }
-                        free(buf_rm_path);
-                        printf("insert okay 3 : %s\n", sms_write->str);
                     }
+
                 }
             }
             // update max mem used
@@ -358,12 +361,11 @@ void* threadF(void* args) {
             if (tot_nfile > statistics->max_nfile) statistics->max_nfile = tot_nfile;
             CHECK_EQ_EXIT("write ClConn size", writen(request->fd_client_id, &sms_write->len, sizeof(size_t)), -1)
             CHECK_EQ_EXIT("write ClConn sms", writen(request->fd_client_id, sms_write->str, sms_write->len), -1)
-            fprintf(stderr, "APPEND FILE \n");
-
+            free(buf_rm_path);
 
         } else if (request->api_id == 6){
             // ------------------ CLOSE FILE ------------------
-
+            fprintf(request->logfile, "CLOSE FILE ==== %s ====\n", request->sms_info);
             struct node * file_node;
             if(searchFileNode(request->sms_info, request->storage, &file_node) == -1) {
                 sms_write->len = strlen("-1"); // error

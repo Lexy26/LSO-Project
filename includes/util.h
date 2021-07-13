@@ -11,27 +11,11 @@ typedef struct {
     unsigned char *str;
 } msg_t;
 
-// structure for command information
-typedef struct {
-    char option[2];
-    char *param; // optarg, cio' che sta dopo l'opzione opt
-    char * dirname;
-} command_t;
-
-// structure to list requests
-typedef struct {
-    int tot_request;
-    int char_t;
-    int char_h;
-    int char_p;
-    char* char_f;
-    command_t ** lst_char_abc;
-}nb_request;
 
 // print per il file di log
-#define LOG_PRINT(file, content) fprintf(file, "%s | %s ==== %s\n", __DATE__, __TIME__,content);
+#define LOG_PRINT(file, content) fprintf(file, "T.MANAGER ==== %s ====\n",content);
 
-#define LOG_PRINT2_INT(file, content1, content2) fprintf(file, "%s | %s ==== %s %d\n", __DATE__, __TIME__, content1, content2);
+#define LOG_PRINT2_INT(file, content1, content2) fprintf(file, "T.MANAGER ==== %s %d ====\n", content1, content2);
 
 // SYSCALL Control
 #define CHECK_NEQ_EXIT(name, sc, check)    \
@@ -81,6 +65,8 @@ void receivedMsg_File_Content(char ** pathname, unsigned char** sms_content, siz
 
 
 void recievedMsg(unsigned char ** message,int fd_c);
+
+void timer(int time);
 
 // Output of -h command
 #define PRINT_H printf("\nFile Storage Server - Progetto di Laboratorio di Sistemi Operativi 2020/2021\n");\

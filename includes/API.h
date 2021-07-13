@@ -5,8 +5,10 @@
 #define O_CREATE 1
 #define O_OPEN 0
 
+struct timespec;
 
-int simple_opneConnection(const char *sockname, int msec, int maxtime);
+
+int openConnection(const char *sockname, int msec, const struct timespec abstime);
 
 // api_id = 1
 int closeConnection(const char *sockname);
