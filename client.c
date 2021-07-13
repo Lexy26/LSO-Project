@@ -275,7 +275,6 @@ int main(int argc, char *argv[]) {
                     token = strtok_r(NULL, ",", &tmp);
                     timer(nbRequest->char_t);
                 }
-                //free(nbRequest->lst_char_abc[index]);
                 ++index;
             } else if (strcmp(options, "R") == 0) { // -R [n=0] [-d dirname]
                 int nb_files;
@@ -295,7 +294,6 @@ int main(int argc, char *argv[]) {
                 if(readNFiles(nb_files, nbRequest->lst_char_abc[index]->dirname) == -1) {
                     fprintf(stderr,"No files to read\n");
                 }
-                //free(nbRequest->lst_char_abc[index]);
                 timer(nbRequest->char_t);
                 ++index;
             }

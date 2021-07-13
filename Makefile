@@ -43,7 +43,7 @@ $(INC)/conn.o: $(INC)/conn.c $(INC)/conn.h
 $(INC)/API.o: $(INC)/API.c $(INC)/API.h $(INC)/util.o
 	$(CC) $(CCFLAGS) -c $(INC)/API.c -I $(INC) -o $@
 
-$(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h $(INC)/util.o
+$(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h
 	$(CC) $(CCFLAGS) -c $(INC)/configuration.c -I $(INC) -o $@
 
 # ===== Pulizia dei file generati attraverso test1 e test2 =====

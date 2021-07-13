@@ -21,7 +21,6 @@
 #include "./includes/file_storage.h"
 #include "./includes/util_server.h"
 
-#define test 0
 
 queue_t *queue;
 volatile int sigINT_sigQUIT = 0;
@@ -45,10 +44,6 @@ int main(int argc, char *argv[]) {
     memset(cfg, 0, sizeof(config_t));
     configuration(argc, argv, &cfg);
 
-    // Togliere quando faccio rm del socket nel makefile
-//    if(unlink(cfg->SOCKNAME)) {
-//        printf("non c'e' il socket\n");
-//    }
     // Create logfile to save internal operations of server
     FILE * logfile;
     CHECK_EXIT_VAR("fopen logfile", logfile,fopen(cfg->LOGFILE, "w"), NULL)
@@ -58,7 +53,6 @@ int main(int argc, char *argv[]) {
 
     // create STORAGE
     info_storage_t *storage;
-//    CHECK_EXIT_VAR("malloc storage", storage, malloc(sizeof(info_storage_t)), NULL)
     storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
     // create QUEUE Request
@@ -241,7 +235,6 @@ int main(int argc, char *argv[]) {
     fprintf(logfile, "=== SERVER CHIUSO ===");
 
     // close and free all
-    // MANCA ROBA
     freerStorage(&storage);
     close(fd_server);
     fclose(logfile);
@@ -250,7 +243,6 @@ int main(int argc, char *argv[]) {
     close(pipe_fd[1]);
     close(pipe_fd[0]);
     free(queue);
-//    free(storage);
     for(int j = 0; j<i; ++j){
         free(lst_sms_delete[j]);
     }
