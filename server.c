@@ -1,8 +1,6 @@
 /*-------------------FILE STORAGE SERVER-------------------*/
 
 #define _POSIX_C_SOURCE  200112L
-//#include <unistd.h>
-//#include <sys/uio.h>
 #include <sys/select.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,18 +35,20 @@ int updatemax(fd_set set, int fdmax) {
     assert(1 == 0);
     //return -1;
 }
+char *strndup(const char *s, size_t n);
 
 
 int main(int argc, char *argv[]) {
     // create cfg to save configuration info for server init
     config_t *cfg;
     CHECK_EXIT_VAR("malloc cfg", cfg,malloc(sizeof(config_t)), NULL)
+    memset(cfg, 0, sizeof(config_t));
     configuration(argc, argv, &cfg);
 
     // Togliere quando faccio rm del socket nel makefile
-    if(unlink(cfg->SOCKNAME)) {
-        printf("non c'e' il socket\n");
-    }
+//    if(unlink(cfg->SOCKNAME)) {
+//        printf("non c'e' il socket\n");
+//    }
     // Create logfile to save internal operations of server
     FILE * logfile;
     CHECK_EXIT_VAR("fopen logfile", logfile,fopen(cfg->LOGFILE, "w"), NULL)
@@ -58,8 +58,7 @@ int main(int argc, char *argv[]) {
 
     // create STORAGE
     info_storage_t *storage;
-    CHECK_EXIT_VAR("malloc storage", storage, malloc(sizeof(info_storage_t)), NULL)
-    memset(storage, 0, sizeof(info_storage_t));
+//    CHECK_EXIT_VAR("malloc storage", storage, malloc(sizeof(info_storage_t)), NULL)
     storage = createStorage(cfg->MEM_SIZE, cfg->N_FILE);
 
     // create QUEUE Request
@@ -129,6 +128,11 @@ int main(int argc, char *argv[]) {
     statistics->cnt_file_removed = 0;
     statistics->max_mem_used = 0;
     statistics->max_nfile = 0;
+    unsigned char ** lst_sms_delete;
+    int i= 0;
+    CHECK_EXIT_VAR("malloc lst sms delete", lst_sms_delete, malloc(sizeof(unsigned char *)), NULL)
+    memset(lst_sms_delete, 0, sizeof(unsigned char *));
+
     // life cycle of server
     while (1) {
         if (sigINT_sigQUIT == 1) {
@@ -158,7 +162,7 @@ int main(int argc, char *argv[]) {
                     } else if (fd == pipe_fd[0]) {
                         int fd_buf;
                         read(fd, &fd_buf, sizeof(int));
-                        LOG_PRINT2_INT(logfile, "client fd reactivated : ",fd_buf)
+//                        LOG_PRINT2_INT(logfile, "client fd reactivated : ",fd_buf)
                         FD_SET(fd_buf, &set);
                         if (fd_buf > fd_max) fd_max = fd_buf;
                     } else if (fd == pipe_sigint_sigquit[0]) {
@@ -179,14 +183,19 @@ int main(int argc, char *argv[]) {
                         // Reading message request
                         unsigned char * sms;
                         recievedMsg(&sms, fd);
+                        CHECK_EXIT_VAR("realloc", lst_sms_delete, realloc(lst_sms_delete, (i+1)* sizeof(*lst_sms_delete)), NULL)
+                        lst_sms_delete[i] = sms;
+
+                        ++i;
                         struct sms_request  * smsArg;
                         CHECK_EXIT_VAR("malloc smsArg", smsArg, malloc(sizeof(struct sms_request)), NULL)
                         memset(smsArg, 0, sizeof(struct sms_request));
                         // initialise message structure with useful info for thread worker
                         char * tmp;
                         char * token = strtok_r((char *) sms, ",", &tmp); // api_id
-                        smsArg->api_id = strtol(token, NULL, 10);
-                        smsArg->sms_info = tmp; // rest of message
+                        long api_int = strtol(token, NULL, 10);
+                        smsArg->api_id = api_int;
+                        smsArg->sms_info = tmp;
                         smsArg->fd_client_id = fd;
                         smsArg->pipe_fd = pipe_fd[1];
                         smsArg->sockname = cfg->SOCKNAME;
@@ -206,6 +215,7 @@ int main(int argc, char *argv[]) {
                         smsArg->father = NULL;
                         // insert message of client request in queue
                         push(&smsArg);
+
                     }
                 }
             }
@@ -213,21 +223,22 @@ int main(int argc, char *argv[]) {
         }
     }
     CHECK_NEQ_EXIT("pthread_cond_broadcast", pthread_cond_broadcast(&(queue->queue_cond)), 0)
-    for (int i = 0; i < cfg->N_THREAD; ++i) {
-        CHECK_NEQ_EXIT("pthread_join T.Worker", pthread_join(lst_thread[i], NULL), 0)
+    for (int ii = 0; ii < cfg->N_THREAD; ++ii) {
+        CHECK_NEQ_EXIT("pthread_join T.Worker", pthread_join(lst_thread[ii], NULL), 0)
     }
     CHECK_NEQ_EXIT("signal_thread Signal", pthread_join(signal_thread, NULL), 0)
     // table with final statistics
-    fprintf(logfile, "------------------------------------------------------------\n");
-    fprintf(logfile, "-                        STATISTICS                        -\n");
-    fprintf(logfile, "------------------------------------------------------------\n\n");
+    fprintf(stdout, "------------------------------------------------------------\n");
+    fprintf(stdout, "-                        STATISTICS                        -\n");
+    fprintf(stdout, "------------------------------------------------------------\n\n");
     float mem_used = (float) statistics->max_mem_used/(float) 1000000;
-    fprintf(logfile, "Max size reached by storage    : %.6f Mbytes\n", mem_used);
-    fprintf(logfile, "Max number of file in storage  : %ld\n", statistics->max_nfile);
-    fprintf(logfile, "Number of file removed         : %d\n", statistics->cnt_file_removed);
-    fprintf(logfile, "\n------------------------------------------------------------\n");
-    printStorage(&storage, logfile);
-    fprintf(stderr, "Server close\n");
+    fprintf(stdout, "Max size reached by storage    : %.6f Mbytes\n", mem_used);
+    fprintf(stdout, "Max number of file in storage  : %ld\n", statistics->max_nfile);
+    fprintf(stdout, "Number of file removed         : %d\n", statistics->cnt_file_removed);
+    fprintf(stdout, "\n------------------------------------------------------------\n");
+    printStorage(&storage, stdout);
+    fprintf(stdout, "Server close\n");
+    fprintf(logfile, "=== SERVER CHIUSO ===");
 
     // close and free all
     // MANCA ROBA
@@ -240,6 +251,10 @@ int main(int argc, char *argv[]) {
     close(pipe_fd[0]);
     free(queue);
 //    free(storage);
+    for(int j = 0; j<i; ++j){
+        free(lst_sms_delete[j]);
+    }
+    free(lst_sms_delete);
     free(signalHandler);
     free(statistics);
     free(cfg->SOCKNAME);

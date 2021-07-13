@@ -1,22 +1,29 @@
-# ------------ Versione base del Makefile ---------------
+# ------------ Makefile ---------------
 
 # compilatore da usare
 CC = gcc
-# aggiungo alcuni flags di compilazione
+# aggiungo i flags di compilazione
 CCFLAGS += -std=c99 -Wall -g -Werror
 
+# headers
 INC = ./includes
+
+# path per i socket name dei due test
+SOCKETNAME = ./cs_sock
+SOCKETNAME2 = ./cs_sock2
+
 # dipendenze client e server
 OBJ_CLIENT = $(INC)/util.o $(INC)/API.o $(INC)/util_client.o $(INC)/conn.o
 OBJ_SERVER = $(INC)/file_storage.o $(INC)/util_server.o $(INC)/util.o $(INC)/conn.o $(INC)/configuration.o
 
-#  ============= Create object of header file ============  #
+
 server: server.c $(OBJ_SERVER)
 	$(CC) $(CCFLAGS) server.c -I $(INC) $(OBJ_SERVER) -o server -lpthread
 
 client: client.c $(OBJ_CLIENT)
 	$(CC) $(CCFLAGS) client.c -I $(INC) $(OBJ_CLIENT) -o client
 
+#  ============= Create object of header file ============  #
 
 $(INC)/util_client.o: $(INC)/util_client.c $(INC)/util_client.h $(INC)/API.o
 	$(CC) $(CCFLAGS) -c $(INC)/util_client.c -I $(INC) -o $@
@@ -39,23 +46,34 @@ $(INC)/API.o: $(INC)/API.c $(INC)/API.h $(INC)/util.o
 $(INC)/configuration.o: $(INC)/configuration.c $(INC)/configuration.h $(INC)/util.o
 	$(CC) $(CCFLAGS) -c $(INC)/configuration.c -I $(INC) -o $@
 
-cleanall:
+# ===== Pulizia dei file generati attraverso test1 e test2 =====
+cleanall: cleantest1 cleantest2
+
+cleantest1:
+	-rm -f includes/*.o server client output_server1.txt $(SOCKETNAME) logfile.txt test1
+
+cleantest2:
 	-rm -f includes/*.o server client
+	-rm $(SOCKETNAME2) logfile2.txt test2 client1.txt client2.txt client3.txt
+
 
 # ______________ TEST 1 ______________
 test1: test1server test1client
+
 test1server:
 	make server
-	valgrind ./server -F config.txt & # --leak-check=full
+	valgrind --leak-check=full ./server -F config.txt > output_server1.txt 2>&1 &
+
 test1client:
 	make client
-	#chmod +x test1.sh
-	bash ./test1.sh # chmod +x test1.sh || bash
+	bash ./test1.sh
 
 # ______________ TEST 2 ______________
 test2: test2server test2client
+
 test2server:
 	make server
+
 test2client:
 	make client
 	bash ./test2.sh
