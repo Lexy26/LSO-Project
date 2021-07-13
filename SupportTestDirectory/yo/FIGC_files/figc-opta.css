@@ -1,0 +1,35 @@
+.Opta{ 
+	font-family: figc_-_azzurriregular !important;     
+	margin: 2rem 0 !important;
+}
+
+.Opta .Opta-H2, .Opta h2{
+	background: #0075CC !important;
+    color: #fff !important;
+    padding: 12px 16px !important;
+	height:auto !important;
+ }
+
+.Opta .Opta-H2 .Opta-Title, .Opta .Opta-H2 .Opta-Title-Extra, .Opta h2 .Opta-Title, .Opta h2 .Opta-Title-Extra{
+	font-weight:normal !important;
+}
+
+.Opta h2 .Opta-Title{
+	font-size:1.6rem !important;
+}
+
+.Opta .Opta-H2>span, .Opta h2>span {
+    height: auto !important;
+}
+
+.Opta tfoot th, .Opta thead th {
+    background-color: #f3f3f3 !important;
+}
+
+.Opta .Opta_F_O_C .Opta-Scroll .Opta-Window .Opta-Room .Opta-fact{
+font-size:1.6rem !important;
+line-height:initial !important;
+padding:2rem 5rem !important;
+}
+
+.Opta .Opta-Table-Scroll td{font-size:1.4rem !important;}

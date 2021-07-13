@@ -1,0 +1,452 @@
+/* -------------------------------- 
+ 
+Horizontal Timeline 2.0
+    by Studocwho @ yCodeTech
+	
+Original Horizontal Timeline by CodyHouse
+
+Licensed under the MIT license	
+	
+Docs at http://horizontal-timeline.ycodetech.co.uk
+
+-------------------------------- */
+html, body {
+	/* Stop horizontal scrollbar from appearing/disappearing when the content slides across and changes. 
+	Also fixes the fixed flexbox elements from moving along with the transforms.*/
+	height: auto;
+	overflow: auto;
+}
+.horizontal-timeline {
+	opacity: 0;
+	margin: 2em auto;
+	-webkit-transition: opacity 0.2s;
+	-moz-transition: opacity 0.2s;
+	transition: opacity 0.2s;
+}
+.horizontal-timeline ol {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+}
+/* Never visible - this is used in jQuery to check the current MQ */
+.horizontal-timeline::before {
+	content: 'desktop';
+	display: none;
+}
+.horizontal-timeline.loaded {
+	opacity: 1;
+	margin: 0 0 5rem 0 !important;
+	padding: 3rem 4rem 0;
+}
+.horizontal-timeline .touch-enabled {
+	cursor: grab;
+}
+/* Timeline */
+.horizontal-timeline .timeline {
+	position: relative;
+	height: 90px;
+	/*margin: 0 auto; old*/
+	margin:0;
+	display: flex;
+	-ms-flex-wrap: wrap;
+    flex-wrap: wrap;
+	width:97%;
+}
+.horizontal-timeline .events-wrapper {
+	position: relative;
+	/* Fixed up a bug where if the date display was split into two lines 
+	half of the top was cut off (Changed the height to accomodate) */
+	height: 86px;
+	overflow: hidden;
+	-ms-flex: 1 1 auto!important;
+    flex: 1 1 auto!important;
+}
+.horizontal-timeline .events {
+	position: absolute;
+	z-index: 1;
+	left: 33px;
+	bottom: 13%;
+	height: 5px;
+	/* width will be set using JavaScript */
+	background: #dfdfdf;
+	-webkit-transition: -webkit-transform 0.4s;
+	-moz-transition: -moz-transform 0.4s;
+	transition: transform 0.4s;
+}
+/* Filling line */
+.horizontal-timeline .filling-line {
+	position: absolute;
+	z-index: 1;
+	left: 0;
+	top: 0;
+	height: 100%;
+	width: 100%;
+	background-color: #C8B67F;
+	-webkit-transform: scaleX(0);
+	-moz-transform: scaleX(0);
+	-ms-transform: scaleX(0);
+	-o-transform: scaleX(0);
+	transform: scaleX(0);
+	-webkit-transform-origin: left center;
+	-moz-transform-origin: left center;
+	-ms-transform-origin: left center;
+	-o-transform-origin: left center;
+	transform-origin: left center;
+	-webkit-transition: -webkit-transform 0.3s;
+	-moz-transition: -moz-transform 0.3s;
+	transition: transform 0.3s;
+}
+/* Event dates on the timeline */
+.horizontal-timeline .events a {
+	position: absolute;
+	bottom: 0;
+	z-index: 2;
+	text-align: center;
+	text-decoration: none;
+	padding-bottom: 15px;
+	color: #000;
+	/* Fix bug on Safari - text flickering while timeline translates */
+	-webkit-transform: translateZ(0);
+	-moz-transform: translateZ(0);
+	-ms-transform: translateZ(0);
+	-o-transform: translateZ(0);
+	transform: translateZ(0);
+}
+/* Dots for the event dates on the timeline */
+.horizontal-timeline .events a::after {
+	content: '';
+	position: absolute;
+	left: 40%;
+	bottom: -3px;
+	height: 12px;
+	width: 12px;
+	border-radius: 50%;
+	background-color: #dfdfdf;
+	-webkit-transition: background-color 0.3s, border-color 0.3s;
+	-moz-transition: background-color 0.3s, border-color 0.3s;
+	transition: background-color 0.3s, border-color 0.3s;
+}
+/* Stop mouse pointer events on a selected event */
+.horizontal-timeline .events a.selected {
+	pointer-events: none;
+}
+.horizontal-timeline .events a.selected::after, 
+.horizontal-timeline .events a.older-event::after {
+	border: 2px solid #C8B67F;
+    background-color: #fff;
+}
+.horizontal-timeline .events a:hover {
+	text-decoration: underline;
+}
+/* Navigation */
+.timeline-navigation {
+	position: relative;
+	top: 60px;
+	-webkit-transform: translateY(-50%);
+	-moz-transform: translateY(-50%);
+	-ms-transform: translateY(-50%);
+	-o-transform: translateY(-50%);
+	transform: translateY(-50%);
+	z-index: 2;
+}
+.timeline-navigation#leftNav {
+    	left: 0;
+		
+}
+.timeline-navigation#rightNav {
+	right: -15px;
+}
+.timeline-navigation a {
+	display: inline;
+    text-decoration: none;
+    color: #000;
+}
+.timeline-navigation a:hover {
+	color: #C8B67F;
+	border-color: #C8B67F;
+}
+
+/* Inactive */
+.timeline-navigation a.inactive {
+	cursor: not-allowed;
+	border-color: #d3d3d3;
+	color: #d3d3d3;
+}
+
+  .timeline-navigation a::after {
+    content: '';
+    position: absolute;
+    height: 32px;
+    width: 32px;
+    left: 90%;
+    top: 80%;
+    bottom: auto;
+    right: auto;
+    -webkit-transform: translateX(-50%) translateY(-50%);
+    -moz-transform: translateX(-50%) translateY(-50%);
+    -ms-transform: translateX(-50%) translateY(-50%);
+    -o-transform: translateX(-50%) translateY(-50%);
+    transform: translateX(-50%) translateY(-50%);
+    background: url(../assets/content/cd-arrow.svg) no-repeat 0 0;
+}
+
+.timeline-navigation a.prev {
+    left: 0;
+    -webkit-transform: translateY(-50%) rotate(180deg);
+    -moz-transform: translateY(-50%) rotate(180deg);
+    -ms-transform: translateY(-50%) rotate(180deg);
+    -o-transform: translateY(-50%) rotate(180deg);
+    transform: translateY(-50%) rotate(180deg);
+}
+
+.timeline-navigation a.next {
+    right: 0;
+}
+
+.timeline-navigation a.inactive::after {
+    background-position: 0 -16px;
+}
+
+.timeline-navigation a {
+    position: absolute;
+    z-index: 1;
+    bottom: 0;
+    -webkit-transform: translateY(-50%);
+    -moz-transform: translateY(-50%);
+    -ms-transform: translateY(-50%);
+    -o-transform: translateY(-50%);
+    transform: translateY(-50%);
+    height: 34px;
+    width: 34px;
+    border-radius: 50%;
+    border: 2px solid #dfdfdf;
+    overflow: hidden;
+    color: transparent;
+    text-indent: 100%;
+    white-space: nowrap;
+    -webkit-transition: border-color 0.3s;
+    -moz-transition: border-color 0.3s;
+    transition: border-color 0.3s;
+	background-color: #f2f2f2;
+}
+
+.timeline-navigation a::before {
+	content:""
+}
+
+/* Autoplay Pause/Play button */
+.timeline-navigation#pausePlay {
+	width: 100%;
+    	top: 10px;
+    	text-align: center;
+}
+/* Event content */
+.horizontal-timeline .events-content {
+	position: relative;
+	margin: 0;
+	margin-left: auto;
+   	margin-right: auto;
+	-webkit-transition: height 0.4s 0.2s;
+	-moz-transition: height 0.4s 0.2s;
+	transition: height 0.4s 0.2s;
+	overflow:hidden;
+	height:100% !important;
+}
+
+
+.horizontal-timeline .events-content h3{font-weight: 700;
+font-size: 3.8rem;
+margin-bottom: 3rem;
+}
+
+/* Autoplay progress bar */
+.horizontal-timeline .events-content .progressBarWrapper {
+	position: absolute;
+	width: 100%;
+	height: 4px;
+	margin-top: -4px;
+	padding: 0 20px;
+}
+.horizontal-timeline .events-content .progressBar {
+  	width: 0;
+  	height: inherit;
+  	background: #002bff;
+}
+.horizontal-timeline .events-content li {
+	position: absolute;
+	width: 100%;
+	left: 0;
+	top: 0;
+	margin: auto;
+	padding: 10px;
+	opacity: 0;
+	background:transparent;
+	
+	-webkit-touch-callout: none; /* iOS Safari */
+	-webkit-user-select: none; /* Safari */
+	-khtml-user-select: none; /* Konqueror HTML */
+	-moz-user-select: none; /* Firefox */
+	-ms-user-select: none; /* Internet Explorer/Edge */
+	user-select: none; /* Non-prefixed version, currently supported by Chrome and Opera */
+	
+	-webkit-animation-duration: 0.4s;
+	-moz-animation-duration: 0.4s;
+	animation-duration: 0.4s;
+	
+	-webkit-transition: opacity 0.4s 0.2s;
+	-moz-transition: opacity 0.4s 0.2s;
+	transition: opacity 0.4s 0.2s;
+}
+/* The selected events content */
+.horizontal-timeline .events-content li.selected {
+	position: relative;
+	z-index: 2;
+	opacity: 1;
+	list-style:none;
+}
+/* Event content animations */
+.horizontal-timeline .events-content li.enter-right, 
+.horizontal-timeline .events-content li.leave-right {
+	-webkit-animation-name: timeline-enter-right;
+	-moz-animation-name: timeline-enter-right;
+	animation-name: timeline-enter-right;
+}
+.horizontal-timeline .events-content li.enter-left, 
+.horizontal-timeline .events-content li.leave-left {
+	-webkit-animation-name: timeline-enter-left;
+	-moz-animation-name: timeline-enter-left;
+	animation-name: timeline-enter-left;
+}
+.horizontal-timeline .events-content li.leave-right, 
+.horizontal-timeline .events-content li.leave-left {
+	-webkit-animation-direction: reverse;
+	-moz-animation-direction: reverse;
+	animation-direction: reverse;
+}
+@-webkit-keyframes timeline-enter-right {
+	0% {
+		 opacity: 0;
+		 -webkit-transform: translateX(100%);
+	}
+	100% {
+		opacity: 1;
+		-webkit-transform: translateX(0%);
+	}
+}
+@-moz-keyframes timeline-enter-right {
+	0% {
+		 opacity: 0;
+		 -moz-transform: translateX(100%);
+	}
+	100% {
+		 opacity: 1;
+		 -moz-transform: translateX(0%);
+	}
+}
+@keyframes timeline-enter-right {
+	0% {
+		 opacity: 0;
+		 -webkit-transform: translateX(100%);
+		 -moz-transform: translateX(100%);
+		 -ms-transform: translateX(100%);
+		 -o-transform: translateX(100%);
+		 transform: translateX(100%);
+	}
+	100% {
+		 opacity: 1;
+		 -webkit-transform: translateX(0%);
+		 -moz-transform: translateX(0%);
+		 -ms-transform: translateX(0%);
+		 -o-transform: translateX(0%);
+		 transform: translateX(0%);
+	}
+}
+@-webkit-keyframes timeline-enter-left {
+	0% {
+		 opacity: 0;
+		 -webkit-transform: translateX(-100%);
+	}
+	100% {
+		 opacity: 1;
+		 -webkit-transform: translateX(0%);
+	}
+}
+@-moz-keyframes timeline-enter-left {
+	0% {
+		 opacity: 0;
+		 -moz-transform: translateX(-100%);
+	}
+	100% {
+		 opacity: 1;
+		 -moz-transform: translateX(0%);
+	}
+}
+@keyframes timeline-enter-left {
+	0% {
+		 opacity: 0;
+		 -webkit-transform: translateX(-100%);
+		 -moz-transform: translateX(-100%);
+		 -ms-transform: translateX(-100%);
+		 -o-transform: translateX(-100%);
+		 transform: translateX(-100%);
+	}
+	100% {
+		 opacity: 1;
+		 -webkit-transform: translateX(0%);
+		 -moz-transform: translateX(0%);
+		 -ms-transform: translateX(0%);
+		 -o-transform: translateX(0%);
+		 transform: translateX(0%);
+	}
+}
+@media only screen and (min-width: 1100px) {
+	.horizontal-timeline {
+		margin: 6em auto;
+	}
+}
+@media only screen and (min-width: 701px) and (max-width: 1100px) {
+	/* Never visible - this is used in jQuery to check the current MQ */
+	.horizontal-timeline::before {
+		content: 'tablet';
+	}
+}
+@media only screen and (min-width: 501px) and (max-width: 700px) {
+	/* Never visible - this is used in jQuery to check the current MQ */
+	.horizontal-timeline::before {
+		content: 'smallTablet';
+	}
+}
+@media only screen and (min-width: 361px) and (max-width: 500px) {
+	/* Never visible - this is used in jQuery to check the current MQ */
+	.horizontal-timeline::before {
+		content: 'mobile';
+	}
+}
+@media only screen and (max-width: 360px) {
+	/* Never visible - this is used in jQuery to check the current MQ */
+	.horizontal-timeline::before {
+		content: 'tinyMobile';
+	}
+}
+@media only screen and (max-width: 1100px) {
+	.horizontal-timeline .timeline {
+		padding-bottom: 40px !important;
+	}
+	.timeline-navigation#leftNav {
+		-ms-flex-direction: column-reverse !important;
+		flex-direction: column-reverse !important;
+	}
+	.timeline-navigation#rightNav {
+		-ms-flex-direction: column !important;
+    	flex-direction: column !important;
+	}
+	.timeline-navigation#leftNav,
+	.timeline-navigation#rightNav {
+		display: -ms-flexbox !important;
+		display: flex !important;
+		/*top: -5px !important;*/
+	}
+	.timeline-navigation#pausePlay {
+		top: 20px !important;
+	}
+}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.7 44.43">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #c8b67f;
+      }
+    </style>
+  </defs>
+  <title>coppa-internazionale</title>
+  <g id="Livello_2" data-name="Livello 2">
+    <g id="Livello_1-2" data-name="Livello 1">
+      <path class="cls-1" d="M13.77,29.35l2.44-16.28,1.49,0V7.26s-1.75-1.49-2.9,0l-.05,1.32L11,6.07,11.12,0H6.58l.09,6.07L3,8.54l0-1.32C1.75,5.77,0,7.26,0,7.26v5.86l1.5,0L3.93,29.35l1.2,1.24.68,3.21L5,38.71a4.46,4.46,0,0,0-3.81,2.66s1.74,2.75,7.33,3v0h.66v0c5.59-.28,7.33-3,7.33-3a4.46,4.46,0,0,0-3.81-2.66l-.81-4.91.68-3.21Z"/>
+    </g>
+  </g>
+</svg>

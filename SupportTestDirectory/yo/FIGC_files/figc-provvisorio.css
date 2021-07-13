@@ -1,0 +1,126 @@
+/* da verificare */
+.elenco-calendario .occhiello {margin: 1rem 0 !important;}
+.elenco-calendario .areaTematica {font-style:italic; font-size:1.6rem;}
+
+
+/* CAROSELLO lightSlider USATO NELLE APERTURE DELLE HOME DI SEZIONE (opzione non usata)*/
+.widg-carousel-LightSlider-c12 { margin-bottom:4rem}
+.widg-carousel-LightSlider-c12 .lslide img { width: 855px; }
+.widg-carousel-LightSlider-c12 .lslide {
+	position:relative;
+}
+.widg-carousel-LightSlider-c12 .lslide a.content-lslide {
+	display: block;
+	position:absolute;
+	color:#fff;
+	padding:1rem 2rem;
+	bottom:0;
+	background-color:#092651;
+	width:100%;
+	z-index:9999;	
+}
+.widg-carousel-LightSlider-c12 .lslide a.content-lslide:hover {
+    background-color: #0573CE; text-decoration:none
+}
+.widg-carousel-LightSlider-c12 .lslide a.content-lslide .data {
+	display: block;
+	 color: #fff;
+    font-style: italic;
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+}
+.widg-carousel-LightSlider-c12 .lslide a.content-lslide .titolo {
+    font-family: 'figc_-_azzurriregular';
+    font-size: 2.4rem;
+	display:block;
+    
+}
+
+
+/* SOCIAL WALL BUTTON */
+
+.socialWallButton a{
+	text-transform: uppercase;
+    font-size: 2rem;
+    padding: 3rem 0;
+    background-color: #0057B8;
+    margin: 0rem;
+    display: inline-block;
+    color: #fff !important;
+    font-family: 'figc_-_azzurrilight';
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    left: 0;
+	}
+
+.socialWallButton a:hover{
+	text-decoration:none;
+	background-color:#092651;
+}
+
+
+.sidebar .filtro-comunicati{display:block;}
+
+
+/**/
+.amcharts-chart-div a[title="Interactive JavaScript maps"]  {
+	display:none!important
+ }
+
+
+/* Competizioni femminile widget */
+
+
+.fasciaCompetizioni {
+    background-color: #E1E8F0;
+    margin-top: -2rem;
+    width: 98%;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+}
+
+
+/* Filtro comunicati */
+
+.nav-side-menu.menu-comunicati span, .nav-side-menu.menu-comunicati li a {
+    font-size: 1.6rem;
+    padding: 0.8rem 1.5rem;
+	background-color: #08305E;
+	color:#fff;
+}
+
+.nav-side-menu.menu-comunicati li ul li a {
+    padding: 0.5rem 1.5rem;
+}
+
+.menu-comunicati .arrow-bottom::before {
+    border-top: 2px solid #fff;
+    border-left: 2px solid #fff;
+}
+
+.nav-side-menu.menu-comunicati li ul li a{
+	background-color: #e3ebf2;
+	border-bottom: 2px solid #fff;
+    background-color: #e3ebf2;
+	color:#08305E;
+}
+
+
+.content .corpo .abstract-blocco {margin:0.5rem 0; font-size:1.5rem;}
+.content .corpo .blocco-allegato .data{ margin:0.5rem 0;}
+.blocco-allegato h5 a{font-size:1.7rem;}
+
+.widg-ProssimoTurno .widg-body .col-lg-6 .clubBox{min-height: 200px;}
+
+
+.widg-ProssimoTurno .widg-body  .direttaTv {
+	text-align:center;
+	font-size: 1.3rem;
+    margin: 1rem 0 0 0;
+}
+.widg-ProssimoTurno .widg-body .widg-footer-link {
+	position: absolute;
+    bottom: 10px;
+    width: 90%;
+}

@@ -1,0 +1,205 @@
+@charset "UTF-8";
+/* CSS Document */
+
+.corpo .tabellaClassifica { padding: 0px;}
+
+.tabellaClassifica {overflow:auto; padding: 0 15px;}
+
+.tabellaClassifica table {
+    border-collapse: collapse;
+    border-spacing: 0;
+	background-color: transparent;
+}
+
+.tabellaClassifica .tabella {
+    width: 100%;
+    color: #08305E;
+    font-weight: 700;
+}
+
+.tabellaClassifica .tabella tr.head {
+    background-color: transparent;
+}
+
+.tabellaClassifica .tabella tr {
+    height: 30px;
+}
+
+.tabellaClassifica .tabella tr:nth-child(even) {background: #E1E8F0};
+.tabellaClassifica .tabella tr:nth-child(odd) {};
+
+.tabellaClassifica .tabella th {
+    text-align: center;
+    font-weight: 700;
+    font-size: 12px;
+	color: #a7b1bc;
+	text-transform: uppercase;
+}
+
+.tabellaClassifica .tabella th:first-child {
+    color: #333;
+    text-align: left;
+	padding:0.5rem 1rem;
+
+}
+
+.tabellaClassifica .tabella .bleft {
+    border-left: 1px solid #ddd;
+}
+
+
+.tabellaClassifica .tabella td {
+    font-size: 12px;
+	padding:0.5rem 1rem;
+}
+
+.tabellaClassifica .tabella td.blue, .tabella td.hidden-xs  {
+    text-align: center;
+}
+
+.tabellaClassifica .squadra td {
+    text-align: left;
+}
+
+
+.tabellaClassifica .tabella th.blue, td.blue {
+    color: #3f6192;
+}
+
+
+
+/*calendario*/
+
+
+.tabellaClassifica .risultati {
+    color: #a7b1bc;
+    font-weight: 700;
+    width: 80%;	
+}
+.tabellaClassifica .risultati tr.intestazione {
+    background-color: transparent;
+	height: 30px;
+}
+
+.tabellaClassifica .risultati tr {
+    background-color: transparent;
+	height: 10px;
+}
+
+.tabellaClassifica .risultati th {
+    text-align: left;
+    font-weight: 700;
+    font-size: 12px;
+	color: #a7b1bc;
+	text-transform: uppercase;
+}
+
+.tabellaClassifica .risultati th:first-child {
+    color: #333;
+    text-align: left;
+
+}
+
+.tabellaClassifica .risultati .bleft {
+    border-left: 1px solid #ddd;
+}
+
+
+.tabellaClassifica .risultati td {
+    font-size: 12px;
+}
+
+.tabellaClassifica .risultati td.blue,.tabellaClassifica  .risultati td.hidden-xs  {
+    text-align: center;
+}
+
+.tabellaClassifica .risultati td {
+    text-align: left;
+}
+
+
+.tabellaClassifica .risultati th.blue,.tabellaClassifica  td.blue {
+    color: #3f6192;
+}
+
+
+.tabellaClassifica .squadra a:link, .squadra a:visited  {
+    color: #E8982E;
+	text-transform:uppercase;
+	text-decoration:none;
+	text-align:left;
+    padding-left: 10px;
+
+
+
+}
+
+.tabellaClassifica .team_lose a:link,.tabellaClassifica  .team_lose a:visited  {
+    color: #E8982E;
+	text-transform:uppercase;
+	text-decoration:none;
+	text-align:left;
+}
+
+.tabellaClassifica .tabellini a:link,.tabellaClassifica  .tabellini a:visited  {
+    color: #3f6192;
+	text-transform:uppercase;
+	text-decoration:none;
+	text-align:left;
+	font-size: 10px;
+}
+
+.tabellaClassifica h2 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 18px;
+    line-height: 24px;
+	font-family: Open Sans, sans-serif;
+
+}
+
+.tabellaClassifica #navgiornate 
+{
+	border-bottom:1px solid #333;
+}
+
+.tabellaClassifica #navgiornate a 
+{
+	text-decoration:none;
+	color: #043174;
+	font-size:12px;
+}
+
+
+.tabellaClassifica td.tabellinoSquadra {
+    background-color: #f90;
+    color: #ffffff;
+    font-weight: bold;
+    width: 280px;
+    border-bottom: 1px solid #fff;
+    font-size: 15px;
+    padding: 10px;
+}
+
+.tabellaClassifica td.tabellinoFormazione {
+    padding: 10px;
+    line-height: 20px;
+    font-size: 14px;
+	width: 30px;
+}
+
+.tabellaClassifica td.tabellinoRisultato {
+    color: #ffffff;
+    background-color: #000000;
+    width: 20px;
+    font-weight: bold;
+	border-bottom: 1px solid #fff;
+	font-size: 15px;
+    padding: 10px;
+}
+
+.squadra{text-transform:uppercase;}
+	
+
+.tabellaClassifica .tabella .hidden-xs { text-align:center}
+
